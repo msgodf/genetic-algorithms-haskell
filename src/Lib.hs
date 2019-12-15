@@ -4,15 +4,29 @@ module Lib
 
 import System.Random
 import Control.Monad
+import Data.Ord
 
 someFunc :: IO ()
 someFunc = putStrLn "someFunc"
 
-type Individual = [Integer]
+data Gene = A | B deriving (Show,Eq)
+instance Random Gene where
+  random g = let (x,y) = random g in if (x == True) then (A,y) else (B,y)
+  randomR (a,b) g = random g
 
-individualFitness :: [Integer] -> Integer
-individualFitness individual = foldr1 (+) individual
+data Individual = Individual [Gene] deriving (Show,Eq)
 
+-- If an individual is just a list of Gene, is it better to encapsulate or not?
+-- i.e. making it opaque
+
+instance Ord Individual where
+  a `compare` b = (individualFitness a) `compare` (individualFitness b)
+  (<=) a b = (individualFitness a) <= (individualFitness b)
+
+individualFitness :: Individual -> Int
+individualFitness (Individual xs) = foldr1 (+) (map (\x -> if x == A then 0 else 1) xs)
+
+--foldr1 (+) individual
 
 -- how to get to the Integer inside
 -- For now I'm just going to pass a list of integers, perhaps data encapsulation is
@@ -21,98 +35,26 @@ individualFitness individual = foldr1 (+) individual
 -- Generating individuals and populations
 -- Need some randomness
 
---randomIndividual :: RandomGen g => (g, [Individual]) -> ([Integer], g)
---r :: RandomGen g => IO g -> [(Integer,g)]
---r g = iterate (\(i,f) -> (randomR (0,1) f)) (0,g)
 
-
-type Gene = Bool
-
-starts :: IO ([Gene], StdGen)
-starts = getStdGen >>= return . ((,) [])
-
-
-nextrs :: ([Gene], StdGen) -> IO ([Gene], StdGen)
-nextrs (x,y) = let (i,r2) = random y :: (Gene,StdGen) in return (x ++ [i],r2) 
-
-nextrs2 :: ([Gene], StdGen) -> ([Gene], StdGen)
-nextrs2 (x,y) = let (i,r2) = random y :: (Gene,StdGen) in (x ++ [i],r2) 
-
-nextn :: IO ([Gene], StdGen) -> Int -> IO ([Gene], StdGen)
-nextn x n = foldl (>>=) x $ replicate n nextrs
-
-nextn2 :: (Monad m) => Int -> ([Gene], StdGen) -> m ([Gene], StdGen)
-nextn2 n = return . last .take n . iterate nextrs2
-
---nextrs :: ([Int], StdGen) -> IO ([Int], StdGen)
---nextrs (x,y) = let (i,r2) = random y :: (Int,StdGen) in return (x ++ [i],r2) 
-
---fff = return $ (replicateM 10 nextrs)
-
---fff = do
---  x <- starts
---  starts >>= (replicateM 10 nextrs) :: (IO ([Int], StdGen))
-
--- I want a function that takes a RandomGen and produces a list of n integers and the rest of the generator
-
-
---a = getStdGen >>= randomIndividual
 numberOfGenes = 10
+numberOfIndividuals = 10
 
-individual :: StdGen -> IO ([Gene],StdGen)
-individual r = (return . ((,) [])) r >>= nextn2 numberOfGenes
+nextrs :: ([Gene], StdGen) -> ([Gene], StdGen)
+nextrs (x,g) = let (x2, g2) = random g :: (Gene,StdGen) in (x ++ [x2], g2) 
 
---inindividualo :: StdGen -> ([Gene],StdGen)
-individualo :: Monad m => StdGen -> m ([Gene],StdGen)
-individualo r = nextn2 numberOfGenes ([],r)
+nextn :: Int -> ([Gene], StdGen) -> ([Gene], StdGen)
+nextn n = last .take n . iterate nextrs
 
--- Can call individualo like this
--- getStdGen >>= individualo
--- it needs to be completely non-monadic though for me to use iterate on it
--- which means getting a non-monadic nextn2
---nextn3 :: Int -> ([Gene], StdGen) -> ([Gene], StdGen)
-nextn3 n = last .take n . iterate nextrs2
+individual :: StdGen -> ([Gene],StdGen)
+individual r = nextn 10 ([],r)
 
+nindividuals :: ([[Gene]], StdGen) -> ([[Gene]], StdGen)
+nindividuals (x,g) = let (x2,g2) = individual g in (x ++ [x2], g2)
 
---individualt :: StdGen -> ([Gene],StdGen)
-individualt r = (return . ((,) [])) r >>= nextn3 numberOfGenes
+individuals :: Int -> StdGen -> ([[Gene]],StdGen)
+individuals n r = last $ take n $ iterate nindividuals ([], r)
 
--- individualt <$> getStdGen
--- what is this equivalent to?
--- it's infix fmap
--- fmap individualt getStdGen
-
--- Don't really need to consider IO except for at the outside when we get the generator
-
-
-
--- generate a list of random individuals
-
-
--- need to keep passing the RandomGen through
-
--- individuals would take an IO StdGen and produce an IO ([[Gene]], StdGen)
---nindividuals :: ([[Gene]],StdGen) -> IO ([[Gene]],StdGen)
-nindividuals :: ([[Gene]], StdGen) -> IO ([[Gene]], StdGen)
-nindividuals (x,y) = do
-  (i,r2) <- individual y
-  return (x ++ [i],r2)
-
-nindividualso :: ([[Gene]], StdGen) -> ([[Gene]], StdGen)
-nindividualso (x,y) = let (a,b) = individualt y in (x++[a],b)
-
-individuals :: Monad m => Int -> m StdGen -> m ([[Gene]],StdGen)
-individuals n r = fmap (last . take n . iterate nindividualso) (r >>= (return . (,) ([]::[[Gene]])))
-
--- I wonder whether this is even the nicest way, and whether avoiding the monad whenever possible is better
-individuals2 :: Int -> StdGen -> ([[Gene]],StdGen)
-individuals2 n r = (last . take n . iterate nindividualso) ([]::[[Gene]],r)
-
-
-
--- We only need to call fmap when we are getting an IO something back and need to pass the something to a function
-
-
+-- need to sort a list of individuals by their fitness
 
 -- What is an Individual?
 -- a random sequence of n genes
