@@ -3,7 +3,6 @@ module Lib
     ) where
 
 import System.Random
-import Control.Monad
 import Data.Ord
 import Data.List
 
@@ -16,11 +15,22 @@ instance Random Gene where
 data Individual = Individual [Gene] deriving (Show,Eq)
 
 instance Ord Individual where
-  a `compare` b = individualFitness a `compare` individualFitness b
-  (<=) a b = individualFitness a <= individualFitness b
+  a `compare` b = fitness a `compare` fitness b
+  (<=) a b = fitness a <= fitness b
 
 type Population = [Individual]
 
+-- Trying to come up with a way to make the algorithm more generic
+class (Ord a) => Genetic a where
+  fitness :: a -> Int
+  mutate :: a -> StdGen -> (a,StdGen)
+  crossover :: (a,a) -> StdGen -> ((a,a),StdGen)
+
+instance Genetic Individual where
+  fitness x = individualFitness x
+  mutate x g = mutateIndividual (x,g)
+  crossover (x,y) g = crossoverIndividual (x,y) g
+  
 -- The value of an individual Gene, for calculating fitness
 geneValue :: Gene -> Int
 geneValue A = 0
@@ -57,8 +67,8 @@ mutateGene B = A
 mutateListOfGenes :: [Gene] -> Int -> [Gene]
 mutateListOfGenes xs n = (take n xs) ++ [mutateGene (xs !! n)] ++ (drop (n + 1) xs)
 
-mutate :: (Individual, StdGen) -> (Individual, StdGen)
-mutate (Individual xs, g) =
+mutateIndividual :: (Individual, StdGen) -> (Individual, StdGen)
+mutateIndividual (Individual xs, g) =
   let (r, g2) = randomR (0,1) g :: (Float, StdGen) in
     if r > 1
     then (Individual xs, g2)
@@ -73,27 +83,27 @@ crossoverIndividuals (Individual xs, Individual ys) n =
   let (x2s, y2s) = crossoverListOfGenes (xs, ys) n in
     (Individual x2s, Individual y2s)
 
-crossover :: (Individual, Individual) -> StdGen -> ((Individual, Individual), StdGen)
-crossover ((Individual xs), b) g =
+crossoverIndividual :: (Individual, Individual) -> StdGen -> ((Individual, Individual), StdGen)
+crossoverIndividual ((Individual xs), b) g =
   let (crossoverPoint, g2) = randomR (0, length xs) g :: (Int, StdGen)
       (a2, b2) = crossoverIndividuals (Individual xs, b) crossoverPoint in
     ((a2, b2), g2)
 
 -- A single step of the algorithm
-step :: (Population, StdGen) -> (Population, StdGen)
+step :: (Genetic a) => ([a], StdGen) -> ([a], StdGen)
 step (xs, g) =
-  let alpha:beta:rest = reverse (sort xs)
+  let alpha:beta:rest = reverse $ sort xs
       remainingPopulation = take ((length rest) - 2) rest
       ((gamma, delta), g2) = crossover (alpha, beta) g
-      (gamma2, g3) = mutate (gamma, g2)
-      (delta2, g4) = mutate (delta, g3) in
+      (gamma2, g3) = mutate gamma g2
+      (delta2, g4) = mutate delta g3 in
     (alpha:beta:gamma2:delta2:remainingPopulation, g4)
 
 -- Run the algorithm until the target fitness is reached
 stepWhile :: Population -> StdGen -> Int -> Int -> (Population, Int)
 stepWhile population g generation targetFitness =
   let (xs, g2) = step (population, g)
-      totalFitness = sum $ map individualFitness xs in
+      totalFitness = sum $ map fitness xs in
       if totalFitness >= targetFitness || generation > maxNumberOfGenerations
       then (xs, generation)
       else stepWhile xs g2 (generation + 1) targetFitness
@@ -105,4 +115,4 @@ evolve populationSize targetFitness = do
       (finalPopulation, generations) = stepWhile population g2 0 targetFitness in
     do
       putStrLn $"Generations: " ++ (show generations)
-      putStrLn $ "Fitness: " ++ (show $ sum $ map individualFitness finalPopulation)
+      putStrLn $ "Fitness: " ++ (show $ sum $ map fitness finalPopulation)
