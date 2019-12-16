@@ -1,8 +1,9 @@
+
 module Main where
 import Lib
 
 main :: IO ()
-main = someFunc
+main = evolve 21 160
 
 -- This is faster if the display is shared? wtf
 
