@@ -2,9 +2,10 @@ module SimpleIndividual
     ( individuals
     ) where
 
-import Genetic
-import System.Random
-import Data.Ord
+import Genetic (Genetic(..))
+import System.Random ( RandomGen
+                     , Random(..))
+import Data.Ord (Ord(..))
 
 data Gene = A | B deriving (Show,Eq)
 
@@ -37,16 +38,16 @@ mutationProbability = 0.1
 numberOfIndividuals = 10
 
 -- Generate a list of Genes
-genes :: Int -> StdGen -> ([Gene],StdGen)
+genes :: (RandomGen a) => Int -> a -> ([Gene],a)
 genes n g = iterate f ([], g) !! n where
-  f = (\(x, g) -> let (x2, g2) = random g :: (Gene, StdGen) in (x2:x, g2))
+  f = (\(x, g) -> let (x2, g2) = random g in (x2:x, g2))
 
 -- Generate a single Individual
-individual :: StdGen -> (Individual, StdGen)
+individual :: (RandomGen a) => a -> (Individual, a)
 individual g = let (xs, g2) = (genes numberOfGenes g) in (Individual xs, g2)
 
 -- Generate a list of Individuals
-individuals :: Int -> StdGen -> ([Individual], StdGen)
+individuals :: (RandomGen a) => Int -> a -> ([Individual], a)
 individuals n g = iterate f ([], g) !! n where
   f = (\(x, g) -> let (x2, g2) = individual g in (x2:x, g2))
 
@@ -59,12 +60,12 @@ mutateGene B = A
 mutateListOfGenes :: [Gene] -> Int -> [Gene]
 mutateListOfGenes xs n = (take n xs) ++ [mutateGene (xs !! n)] ++ (drop (n + 1) xs)
 
-mutateIndividual :: (Individual, StdGen) -> (Individual, StdGen)
+mutateIndividual :: (RandomGen a) => (Individual, a) -> (Individual, a)
 mutateIndividual (Individual xs, g) =
-  let (r, g2) = randomR (0,1) g :: (Float, StdGen) in
+  let (r, g2) = randomR (0,1 :: (Float)) g in
     if r > 1
     then (Individual xs, g2)
-    else let (n, g3) = randomR (0, (length xs) - 1) g2 :: (Int, StdGen) in
+    else let (n, g3) = randomR (0, (length xs) - 1) g2 in
       (Individual (mutateListOfGenes xs n), g3)
 
 crossoverListOfGenes :: ([Gene], [Gene]) -> Int -> ([Gene], [Gene])
@@ -75,8 +76,8 @@ crossoverIndividuals (Individual xs, Individual ys) n =
   let (x2s, y2s) = crossoverListOfGenes (xs, ys) n in
     (Individual x2s, Individual y2s)
 
-crossoverIndividual :: (Individual, Individual) -> StdGen -> ((Individual, Individual), StdGen)
+crossoverIndividual :: (RandomGen a) => (Individual, Individual) -> a -> ((Individual, Individual), a)
 crossoverIndividual ((Individual xs), b) g =
-  let (crossoverPoint, g2) = randomR (0, length xs) g :: (Int, StdGen)
+  let (crossoverPoint, g2) = randomR (0, length xs) g
       (a2, b2) = crossoverIndividuals (Individual xs, b) crossoverPoint in
     ((a2, b2), g2)
