@@ -1,10 +1,10 @@
-module Lib
-    ( evolve
+module SimpleIndividual
+    ( individuals
     ) where
 
+import Genetic
 import System.Random
 import Data.Ord
-import Data.List
 
 data Gene = A | B deriving (Show,Eq)
 
@@ -14,17 +14,10 @@ instance Random Gene where
 
 data Individual = Individual [Gene] deriving (Show,Eq)
 
+-- Trying to come up with a way to make the algorithm more generic
 instance Ord Individual where
   a `compare` b = fitness a `compare` fitness b
   (<=) a b = fitness a <= fitness b
-
-type Population = [Individual]
-
--- Trying to come up with a way to make the algorithm more generic
-class (Ord a) => Genetic a where
-  fitness :: a -> Int
-  mutate :: a -> StdGen -> (a,StdGen)
-  crossover :: (a,a) -> StdGen -> ((a,a),StdGen)
 
 instance Genetic Individual where
   fitness x = individualFitness x
@@ -42,7 +35,6 @@ individualFitness (Individual xs) = sum $ map geneValue xs
 numberOfGenes = 10
 mutationProbability = 0.1
 numberOfIndividuals = 10
-maxNumberOfGenerations = 5000
 
 -- Generate a list of Genes
 genes :: Int -> StdGen -> ([Gene],StdGen)
@@ -88,31 +80,3 @@ crossoverIndividual ((Individual xs), b) g =
   let (crossoverPoint, g2) = randomR (0, length xs) g :: (Int, StdGen)
       (a2, b2) = crossoverIndividuals (Individual xs, b) crossoverPoint in
     ((a2, b2), g2)
-
--- A single step of the algorithm
-step :: (Genetic a) => ([a], StdGen) -> ([a], StdGen)
-step (xs, g) =
-  let alpha:beta:rest = reverse $ sort xs
-      remainingPopulation = take ((length rest) - 2) rest
-      ((gamma, delta), g2) = crossover (alpha, beta) g
-      (gamma2, g3) = mutate gamma g2
-      (delta2, g4) = mutate delta g3 in
-    (alpha:beta:gamma2:delta2:remainingPopulation, g4)
-
--- Run the algorithm until the target fitness is reached
-stepWhile :: Population -> StdGen -> Int -> Int -> (Population, Int)
-stepWhile population g generation targetFitness =
-  let (xs, g2) = step (population, g)
-      totalFitness = sum $ map fitness xs in
-      if totalFitness >= targetFitness || generation > maxNumberOfGenerations
-      then (xs, generation)
-      else stepWhile xs g2 (generation + 1) targetFitness
-
-evolve :: Int -> Int -> IO ()
-evolve populationSize targetFitness = do
-  initialGenerator <- getStdGen
-  let (population, g2) = individuals populationSize initialGenerator
-      (finalPopulation, generations) = stepWhile population g2 0 targetFitness in
-    do
-      putStrLn $"Generations: " ++ (show generations)
-      putStrLn $ "Fitness: " ++ (show $ sum $ map fitness finalPopulation)
