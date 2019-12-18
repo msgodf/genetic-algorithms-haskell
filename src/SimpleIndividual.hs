@@ -34,7 +34,6 @@ individualFitness (Individual xs) = sum $ map geneValue xs
 
 numberOfGenes = 10
 mutationProbability = 0.1
-numberOfIndividuals = 10
 
 -- could also write this as `bimap (:xs) id $ f g`
 prependAndThread f (xs, g) = (\(x, g) -> (x:xs, g)) $ f g
