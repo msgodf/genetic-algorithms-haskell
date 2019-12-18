@@ -6,7 +6,6 @@ import Genetic (Genetic(..))
 import System.Random ( RandomGen
                      , Random(..))
 import Data.Ord (Ord(..))
-
 data Gene = A | B deriving (Show,Eq)
 
 instance Random Gene where
@@ -37,10 +36,12 @@ numberOfGenes = 10
 mutationProbability = 0.1
 numberOfIndividuals = 10
 
+-- could also write this as `bimap (:xs) id $ f g`
+prependAndThread f (xs, g) = (\(x, g) -> (x:xs, g)) $ f g
+
 -- Generate a list of Genes
 genes :: (RandomGen a) => Int -> a -> ([Gene],a)
-genes n g = iterate f ([], g) !! n where
-  f = (\(x, g) -> let (x2, g2) = random g in (x2:x, g2))
+genes n g = iterate (prependAndThread random) ([], g) !! n where
 
 -- Generate a single Individual
 individual :: (RandomGen a) => a -> (Individual, a)
@@ -48,8 +49,7 @@ individual g = let (xs, g2) = (genes numberOfGenes g) in (Individual xs, g2)
 
 -- Generate a list of Individuals
 individuals :: (RandomGen a) => Int -> a -> ([Individual], a)
-individuals n g = iterate f ([], g) !! n where
-  f = (\(x, g) -> let (x2, g2) = individual g in (x2:x, g2))
+individuals n g = iterate (prependAndThread individual) ([],g) !! n
 
 -- Mutate a single Gene
 mutateGene :: Gene -> Gene
@@ -63,7 +63,7 @@ mutateListOfGenes xs n = (take n xs) ++ [mutateGene (xs !! n)] ++ (drop (n + 1) 
 mutateIndividual :: (RandomGen a) => (Individual, a) -> (Individual, a)
 mutateIndividual (Individual xs, g) =
   let (r, g2) = randomR (0,1 :: (Float)) g in
-    if r > 1
+    if r > mutationProbability
     then (Individual xs, g2)
     else let (n, g3) = randomR (0, (length xs) - 1) g2 in
       (Individual (mutateListOfGenes xs n), g3)
