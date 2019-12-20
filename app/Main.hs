@@ -4,12 +4,12 @@ import Genetic
 import System.Random
 
 main :: IO ()
-main = evolve 20 182
+main = evolve 20 10 182
 
-evolve :: Int -> Int -> IO ()
-evolve populationSize targetFitness = do
+evolve :: Int -> Int -> Int -> IO ()
+evolve populationSize numberOfGenes targetFitness = do
   initialGenerator <- getStdGen
-  let (population, g2) = individuals populationSize initialGenerator
+  let (population, g2) = individuals populationSize numberOfGenes initialGenerator 0.3
       (finalPopulation, generations) = stepWhile population g2 0 targetFitness in
     do
       putStrLn $"Generations: " ++ (show generations)
