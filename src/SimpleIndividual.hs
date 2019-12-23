@@ -1,5 +1,9 @@
 module SimpleIndividual
     ( individuals
+    , Individual(..)
+    , Gene(..)
+    , crossoverListOfGenes
+    , mutateListOfGenes
     ) where
 
 import Genetic (Genetic(..))
@@ -55,8 +59,9 @@ mutateGene A = B
 mutateGene B = A
 
 -- Mutate a single Gene in a list of Genes
+-- n should be a valid index in the list
 mutateListOfGenes :: [Gene] -> Int -> [Gene]
-mutateListOfGenes xs n = (take n xs) ++ [mutateGene (xs !! n)] ++ (drop (n + 1) xs)
+mutateListOfGenes xs n = (take n xs) ++ [mutateGene (xs !! n)] ++ (drop (n + 1) xs) where _ = xs !! n
 
 mutateIndividual :: (RandomGen a) => (Individual, a) -> (Individual, a)
 mutateIndividual (Individual {genes = xs, mutationProbability = m}, g) =
