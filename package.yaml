@@ -23,6 +23,7 @@ dependencies:
 - base >= 4.11 && < 5
 - random
 - QuickCheck
+- containers
 
 library:
   source-dirs: src
@@ -38,6 +39,7 @@ executables:
     dependencies:
     - hs
     - random
+    - containers
 
 tests:
   hs-test:

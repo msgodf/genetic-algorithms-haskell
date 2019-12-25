@@ -64,3 +64,11 @@ maxDepth :: Int -> Tree -> Int
 maxDepth d (Branch o a b) = if m > n then m else n where m = maxDepth (d + 1) a
                                                          n = maxDepth (d + 1) b
 maxDepth d (Leaf a) = d
+
+labelTree :: Tree -> Int -> Set Int -> Set Int
+labelTree (Leaf a) n xs = (singleton n) `union` xs
+labelTree (Branch o a b) n xs = (singleton n) `union` (labelTree a (2*n + 1) xs) `union` (labelTree b (2*n + 2) xs)
+
+intersectionOfTreeLabels :: Tree -> Tree -> Set Int
+intersectionOfTreeLabels t1 t2 = (labelTree t2 0 empty) `intersection` (labelTree t1 0 empty)
+
