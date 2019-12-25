@@ -2,18 +2,29 @@ module Tree where
 
 import Genetic (Genetic(..))
 import System.Random
+import Data.Ord (Ord(..))
+import Data.Set
 
-data Operation = Add | Subtract | Multiply | Divide deriving (Show)
+data Operation = Add | Subtract | Multiply | Divide deriving (Show,Eq)
 
 maximumTreeDepth = 10
+
+instance Ord Tree where
+  a `compare` b = fitness a `compare` fitness b
+  (<=) a b = fitness a <= fitness b
+
+instance Genetic Tree where
+  fitness x = let (Leaf v) = evaluate x in v
+  mutate x g = (x, g)
+  crossover (x,y) g = ((x,y),g)
 
 instance Random Operation where
   random g = let (x, g2) = randomR (0, 3 :: Int) g in ([Add, Subtract, Multiply, Divide] !! x, g2)
   randomR _ g = random g
   
-type Value = Float
+type Value = Double
 
-data Tree = Leaf Value | Branch Operation Tree Tree deriving (Show)
+data Tree = Leaf Value | Branch Operation Tree Tree deriving (Show,Eq)
 
 instance Random Tree where
   random g = (\(x,_,y) -> (x, y)) $ randomTree 0 g

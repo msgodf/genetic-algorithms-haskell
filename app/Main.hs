@@ -6,7 +6,7 @@ import System.Random
 main :: IO ()
 main = evolve 20 10 182
 
-evolve :: Int -> Int -> Int -> IO ()
+evolve :: Int -> Int -> Double -> IO ()
 evolve populationSize numberOfGenes targetFitness = do
   initialGenerator <- getStdGen
   let (population, g2) = individuals populationSize numberOfGenes initialGenerator 0.3

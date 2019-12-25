@@ -26,7 +26,7 @@ instance Ord Individual where
   (<=) a b = fitness a <= fitness b
 
 instance Genetic Individual where
-  fitness x = individualFitness x
+  fitness x = fromIntegral $ individualFitness x
   mutate x g = mutateIndividual (x,g)
   crossover (x,y) g = crossoverIndividual (x,y) g
   
