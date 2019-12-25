@@ -1,4 +1,7 @@
-module Tree where
+module Tree
+  ( trees
+  , Tree(..)
+  ) where
 
 import Genetic (Genetic(..))
 import System.Random
@@ -8,15 +11,16 @@ import Data.Set
 data Operation = Add | Subtract | Multiply | Divide deriving (Show,Eq)
 
 maximumTreeDepth = 10
+targetValue = 20
 
 instance Ord Tree where
   a `compare` b = fitness a `compare` fitness b
   (<=) a b = fitness a <= fitness b
 
 instance Genetic Tree where
-  fitness x = let (Leaf v) = evaluate x in v
+  fitness x = let (Leaf v) = evaluate x in -abs(targetValue - v)
   mutate x g = (x, g)
-  crossover (x,y) g = ((x,y),g)
+  crossover (x,y) g = crossoverNodes (x,y) g
 
 instance Random Operation where
   random g = let (x, g2) = randomR (0, 3 :: Int) g in ([Add, Subtract, Multiply, Divide] !! x, g2)
@@ -45,6 +49,11 @@ randomTree d g = if d >= maximumTreeDepth
                (right, d3, g5) = randomTree (d + 1) g4 in
              ((Branch operation left right), d3, g5)
 
+prependAndThread f (xs, g) = (\(x, g) -> (x:xs, g)) $ f g
+
+trees :: (RandomGen g) => Int -> g -> ([Tree],g)
+trees n g = iterate (prependAndThread (\g -> let (x,y,z) = randomTree 0 g in (x,z))) ([],g) !! n
+
 operate :: Operation -> Value -> Value -> Value
 operate Add x y = x + y
 operate Subtract x y = x - y
@@ -71,4 +80,16 @@ labelTree (Branch o a b) n xs = (singleton n) `union` (labelTree a (2*n + 1) xs)
 
 intersectionOfTreeLabels :: Tree -> Tree -> Set Int
 intersectionOfTreeLabels t1 t2 = (labelTree t2 0 empty) `intersection` (labelTree t1 0 empty)
+
+swapNodes :: (Tree, Tree) -> Int -> Int -> (Tree, Tree)
+swapNodes (Branch o1 a b, Branch o2 c d) n m = let (a2,c2) = swapNodes (a,c) (2*n + 1) m
+                                                   (b2,d2) = swapNodes (b,d) (2*n + 2) m in
+                                                       if n == m then (Branch o2 c2 d2,Branch o1 a2 b2)
+                                                       else (Branch o1 a2 b2, Branch o2 c2 d2)
+swapNodes (a, b) n m = if n == m then (b, a) else (a, b)
+
+crossoverNodes :: (RandomGen g) => (Tree, Tree) -> g -> ((Tree, Tree), g)
+crossoverNodes (a,b) g = let intersectionSet = intersectionOfTreeLabels a b in
+  let (crossoverPoint, g2) = randomR (0, ((length intersectionSet)-1)) g in
+    (swapNodes (a,b) 0 (elemAt crossoverPoint intersectionSet),g2)
 

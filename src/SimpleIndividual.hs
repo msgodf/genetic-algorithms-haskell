@@ -43,7 +43,7 @@ prependAndThread f (xs, g) = (\(x, g) -> (x:xs, g)) $ f g
 
 -- Generate a list of Genes
 randomGenes :: (RandomGen a) => Int -> a -> ([Gene],a)
-randomGenes n g = iterate (prependAndThread random) ([], g) !! n where
+randomGenes n g = iterate (prependAndThread random) ([], g) !! n
 
 -- Generate a single Individual
 individual :: (RandomGen a) => Int -> Float -> a -> (Individual, a)
