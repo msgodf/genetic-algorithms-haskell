@@ -23,11 +23,11 @@ instance Ord Tree where
 
 instance Genetic Tree where
   fitness x = -(sum $ fmap (\(input, output) -> let (Leaf (Value v)) = evaluate (substitute x (Leaf (Value input))) in abs(output - v)) targets)
-  mutate x g = (x, g)
+  mutate x g = subtreeMutation x g
   crossover (x,y) g = crossoverNodes (x,y) g
 
 instance Random Operation where
-  random g = let (x, g2) = randomR (0, 2 :: Int) g in ([Add, Subtract, Multiply, Divide] !! x, g2)
+  random g = let (x, g2) = randomR (0, 3 :: Int) g in ([Add, Subtract, Multiply, Divide] !! x, g2)
   randomR _ g = random g
 
 data Variable a = Value a | X deriving (Show, Eq)
@@ -64,7 +64,7 @@ operate :: Operation -> (Variable Double) -> (Variable Double) -> (Variable Doub
 operate Add (Value x) (Value y) = (Value (x + y))
 operate Subtract (Value x) (Value y) = (Value (x - y))
 operate Multiply (Value x) (Value y) = (Value (x * y))
-operate Divide (Value x) (Value y) = (Value (x / y))
+operate Divide (Value x) (Value y) = if x == 0 || y == 0 || x == y then (Value 1e18) else (Value (x / y))
 
 evaluate :: Tree -> Tree
 evaluate (Leaf a) = (Leaf a)
@@ -94,12 +94,40 @@ swapNodes (Branch o1 a b, Branch o2 c d) n m = let (a2,c2) = swapNodes (a,c) (2*
                                                        else (Branch o1 a2 b2, Branch o2 c2 d2)
 swapNodes (a, b) n m = if n == m then (b, a) else (a, b)
 
+replaceFirstLeafWithVariable :: Tree -> (Tree,Bool)
+replaceFirstLeafWithVariable (Leaf (Value x)) = ((Leaf X),True)
+replaceFirstLeafWithVariable (Branch o a b) = let (t1,r1) = replaceFirstLeafWithVariable a
+                                                  (t2,r2) = replaceFirstLeafWithVariable b in
+                                                  if r1
+                                                  then (Branch o t1 b, r1)
+                                                  else
+                                                    if r2
+                                                    then (Branch o a t2, r2)
+                                                    else (Branch o a b, False)
+replaceFirstLeafWithVariable t = (t, False)
+
+substituteNthNode :: Tree -> Tree -> Int -> Int -> Tree
+substituteNthNode (Leaf a) v n m = if n == m then v else (Leaf a)
+substituteNthNode (Branch o a b) v n m = if n == m then v else (Branch o (substituteNthNode a v n (2*m + 1)) (substituteNthNode b v n (2*m + 2)))
+
+subtreeMutation :: (RandomGen a) => Tree -> a -> (Tree, a)
+subtreeMutation t g = let labels = labelTree t 0 empty
+                          (p, g2) = randomR (0, length labels - 1) g
+                          n = elemAt p labels
+                          (t2, _, g3) = randomTree 0 g2 in
+                        (substituteNthNode t t2 n 0, g3)
+
 substitute :: Tree -> Tree -> Tree
 substitute (Leaf X) v = v
-substitute (Branch o1 a b) n = Branch o1 (substitute a n) (substitute b n)
+substitute (Branch o a b) n = Branch o (substitute a n) (substitute b n)
 substitute t n = t
 
 crossoverNodes :: (RandomGen g) => (Tree, Tree) -> g -> ((Tree, Tree), g)
 crossoverNodes (a,b) g = let intersectionSet = intersectionOfTreeLabels a b in
   let (crossoverPoint, g2) = randomR (0, ((length intersectionSet) - 1)) g in
     (swapNodes (a,b) 0 (elemAt crossoverPoint intersectionSet), g2)
+
+containsVariables :: Tree -> Bool
+containsVariables (Branch o a b) = containsVariables a || containsVariables b
+containsVariables (Leaf X) = True
+containsVariables x = False
