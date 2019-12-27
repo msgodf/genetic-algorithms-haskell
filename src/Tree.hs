@@ -1,6 +1,10 @@
 module Tree
   ( trees
+  , evaluate
+  , substitute
   , Tree(..)
+  , Variable(..)
+  , Operation(..)
   ) where
 
 import Genetic (Genetic(..))
@@ -11,28 +15,27 @@ import Data.Set
 data Operation = Add | Subtract | Multiply | Divide deriving (Show,Eq)
 
 maximumTreeDepth = 10
-targetValue = 20
+targets = [(-3.0, 9.0), (-1.0, 1.0), (0.1, 0.01), (1.0, 1.0), (3.0, 9.0)]
 
 instance Ord Tree where
   a `compare` b = fitness a `compare` fitness b
   (<=) a b = fitness a <= fitness b
 
 instance Genetic Tree where
-  fitness x = let (Leaf (Value v)) = evaluate (substitute x (Leaf (Value 1.0))) in -abs(targetValue - v)
+  fitness x = -(sum $ fmap (\(input, output) -> let (Leaf (Value v)) = evaluate (substitute x (Leaf (Value input))) in abs(output - v)) targets)
   mutate x g = (x, g)
   crossover (x,y) g = crossoverNodes (x,y) g
 
 instance Random Operation where
-  random g = let (x, g2) = randomR (0, 3 :: Int) g in ([Add, Subtract, Multiply, Divide] !! x, g2)
+  random g = let (x, g2) = randomR (0, 2 :: Int) g in ([Add, Subtract, Multiply, Divide] !! x, g2)
   randomR _ g = random g
 
---type Value = Double
 data Variable a = Value a | X deriving (Show, Eq)
 
 data Tree = Leaf (Variable Double) | Branch Operation Tree Tree deriving (Show,Eq)
 
 instance Random Tree where
-  random g = (\(x,_,y) -> (x, y)) $ randomTree 0 g
+  random g = (\(x,_,y) -> (x,y)) $ randomTree 0 g
   randomR _ g = random g
 
 randomTree ::(RandomGen g) => Int -> g -> (Tree, Int, g)
@@ -51,9 +54,9 @@ randomTree d g = if d >= maximumTreeDepth
              ((Branch operation left right), d3, g5)
       2 -> (Leaf X, d, g2)
 
-prependAndThread f (xs, g) = (\(x, g) -> (x:xs, g)) $ f g
+prependAndThread f (xs, g) = (\(x, g) -> if (containsVariables x) then (x:xs, g) else (xs,g)) $ f g
 
-trees :: (RandomGen g) => Int -> g -> ([Tree],g)
+trees :: (RandomGen g) => Int -> g -> ([Tree], g)
 trees n g = iterate (prependAndThread (\g -> let (x,y,z) = randomTree 0 g in (x,z))) ([],g) !! n
 
 -- Operate can only operate on values, not variables
