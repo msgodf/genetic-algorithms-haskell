@@ -24,5 +24,6 @@ evolvePrograms populationSize targetFitness = do
     do
       putStrLn $"Generations: " ++ (show generations)
       putStrLn $ show $ finalPopulation !! 0
-      putStrLn $ "Fitness: " ++ (show $ sum $ map fitness finalPopulation)
+      putStrLn $ "Fitness: " ++ (show $ fitness (finalPopulation !! 0))
+      putStrLn $ "Overall fitness: " ++ (show $ sum $ map fitness finalPopulation)
 
