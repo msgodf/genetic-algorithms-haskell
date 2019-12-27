@@ -14,15 +14,16 @@ import Data.Set
 
 data Operation = Add | Subtract | Multiply | Divide deriving (Show,Eq)
 
-maximumTreeDepth = 10
-targets = [(-3.0, 9.0), (-1.0, 1.0), (0.1, 0.01), (1.0, 1.0), (3.0, 9.0)]
+maximumTreeDepth = 8
+programLengthFitnessWeighting = 0.1
+targets = [(-3.0, -27.0), (-1.0, -1.0), (0.1, 0.001), (1.0, 1.0), (3.0, 27.0)]
 
 instance Ord Tree where
   a `compare` b = fitness a `compare` fitness b
   (<=) a b = fitness a <= fitness b
 
 instance Genetic Tree where
-  fitness x = -(sum $ fmap (\(input, output) -> let (Leaf (Value v)) = evaluate (substitute x (Leaf (Value input))) in abs(output - v)) targets)
+  fitness x = -(sum $ fmap (\(input, output) -> let (Leaf (Value v)) = evaluate (substitute x (Leaf (Value input))) in abs(output - v)) targets) - programLengthFitnessWeighting*(fromIntegral (length $ labelTree x 0 empty))
   mutate x g = subtreeMutation x g
   crossover (x,y) g = crossoverNodes (x,y) g
 
