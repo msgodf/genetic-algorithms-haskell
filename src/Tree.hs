@@ -44,6 +44,7 @@ programFitnessOverInputs x xs = -(sum $
                                                               abs(output - v))
                                   xs)
                                 - programLengthFitnessWeighting*(fromIntegral $ treeSize x)
+
 randomTree :: (RandomGen g) => Int -> g -> (Tree, Int, g)
 randomTree d g = if d >= maximumTreeDepth
   then
