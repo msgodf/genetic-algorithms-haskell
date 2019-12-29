@@ -10,10 +10,10 @@ import Genetic (Genetic(..))
 import System.Random ( RandomGen
                      , Random(..))
 import Data.Ord (Ord(..))
-data Gene = A | B deriving (Show,Eq)
+data Gene = A | B deriving (Show, Eq)
 
 instance Random Gene where
-  random g = let (x,y) = random g in if x then (A, y) else (B, y)
+  random g = let (x, y) = random g in if x then (A, y) else (B, y)
   randomR (a, b) g = random g
 
 data Individual = Individual {
@@ -26,9 +26,9 @@ instance Ord Individual where
   (<=) a b = fitness a <= fitness b
 
 instance Genetic Individual where
-  fitness x = fromIntegral $ individualFitness x
-  mutate x g = mutateIndividual (x,g)
-  crossover (x,y) g = crossoverIndividual (x,y) g
+  fitness = fromIntegral . individualFitness
+  mutate = mutateIndividual
+  crossover = crossoverIndividual
   
 -- The value of an individual Gene, for calculating fitness
 geneValue :: Gene -> Int
@@ -42,16 +42,16 @@ individualFitness (Individual {genes = xs}) = sum $ map geneValue xs
 prependAndThread f (xs, g) = (\(x, g) -> (x:xs, g)) $ f g
 
 -- Generate a list of Genes
-randomGenes :: (RandomGen a) => Int -> a -> ([Gene],a)
+randomGenes :: (RandomGen a) => Int -> a -> ([Gene], a)
 randomGenes n g = iterate (prependAndThread random) ([], g) !! n
 
 -- Generate a single Individual
 individual :: (RandomGen a) => Int -> Float -> a -> (Individual, a)
-individual n p g = let (xs, g2) = randomGenes n g in (Individual {genes = xs, mutationProbability = p}, g2)
+individual n p g = let (xs, g2) = randomGenes n g in (Individual xs p, g2)
 
 -- Generate a list of Individuals
 individuals :: (RandomGen a) => Int -> Int -> a -> Float -> ([Individual], a)
-individuals n k g p = iterate (prependAndThread $ individual k p) ([],g) !! n
+individuals n k g p = iterate (prependAndThread $ individual k p) ([], g) !! n
 
 -- Mutate a single Gene
 mutateGene :: Gene -> Gene
@@ -63,9 +63,9 @@ mutateGene B = A
 mutateListOfGenes :: [Gene] -> Int -> [Gene]
 mutateListOfGenes xs n = (take n xs) ++ [mutateGene (xs !! n)] ++ (drop (n + 1) xs) where _ = xs !! n
 
-mutateIndividual :: (RandomGen a) => (Individual, a) -> (Individual, a)
-mutateIndividual (Individual {genes = xs, mutationProbability = m}, g) =
-  let (r, g2) = randomR (0,1 :: (Float)) g in
+mutateIndividual :: (RandomGen a) => Individual -> a -> (Individual, a)
+mutateIndividual Individual {genes = xs, mutationProbability = m} g =
+  let (r, g2) = randomR (0, 1 :: (Float)) g in
     if r > m
     then (Individual {genes = xs, mutationProbability = m}, g2)
     else let (n, g3) = randomR (0, (length xs) - 1) g2 in
@@ -75,12 +75,12 @@ crossoverListOfGenes :: ([Gene], [Gene]) -> Int -> ([Gene], [Gene])
 crossoverListOfGenes (xs, ys) n = (take n xs ++ drop n ys, take n ys ++ drop n xs)
 
 crossoverIndividuals :: (Individual, Individual) -> Int -> (Individual, Individual)
-crossoverIndividuals (Individual {genes = xs, mutationProbability = m1}, Individual {genes = ys, mutationProbability = m2}) n =
+crossoverIndividuals (Individual xs m1, Individual ys m2) n =
   let (x2s, y2s) = crossoverListOfGenes (xs, ys) n in
-    (Individual {genes = x2s, mutationProbability = m1}, Individual {genes = y2s, mutationProbability = m2})
+    (Individual x2s m1, Individual y2s m2)
 
 crossoverIndividual :: (RandomGen a) => (Individual, Individual) -> a -> ((Individual, Individual), a)
 crossoverIndividual ((Individual {genes = xs, mutationProbability = m}), b) g =
-  let (crossoverPoint, g2) = randomR (0, length xs) g
-      (a2, b2) = crossoverIndividuals (Individual {genes = xs, mutationProbability = m}, b) crossoverPoint in
+  let (crossoverPoint, g2) = randomR (0, (length xs) - 1) g
+      (a2, b2) = crossoverIndividuals (Individual xs m, b) crossoverPoint in
     ((a2, b2), g2)

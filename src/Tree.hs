@@ -21,9 +21,9 @@ instance Ord Tree where
   (<=) a b = fitness a <= fitness b
 
 instance Genetic Tree where
-  fitness x = programFitnessOverInputs x targets
-  mutate x g = subtreeMutation x g
-  crossover (x,y) g = crossoverNodes (x,y) g
+  fitness = programFitnessOverInputs targets
+  mutate = subtreeMutation
+  crossover = crossoverNodes
 
 instance Random Operation where
   random g = let (x, g2) = randomR (0, 3 :: Int) g in ([Add, Subtract, Multiply, Divide] !! x, g2)
@@ -34,11 +34,11 @@ data Variable a = Value a | X deriving (Show, Eq)
 data Tree = Leaf (Variable Double) | Branch Operation Tree Tree deriving (Show, Eq)
 
 instance Random Tree where
-  random g = randomTree g
-  randomR _ g = random g
+  random = randomTree
+  randomR _ = random
 
-programFitnessOverInputs :: Tree -> [(Double,Double)] -> Double
-programFitnessOverInputs x xs = -(sum $
+programFitnessOverInputs :: [(Double, Double)] -> Tree -> Double
+programFitnessOverInputs xs x = -(sum $
                                   fmap (\(input, output) -> let (Leaf (Value v)) = evaluate $
                                                                   substitute x (Leaf (Value input)) in
                                                               abs(output - v))
