@@ -34,7 +34,7 @@ data Variable a = Value a | X deriving (Show, Eq)
 data Tree = Leaf (Variable Double) | Branch Operation Tree Tree deriving (Show, Eq)
 
 instance Random Tree where
-  random g = (\(x, _, y) -> (x, y)) $ randomTree 0 g
+  random g = randomTree g
   randomR _ g = random g
 
 programFitnessOverInputs :: Tree -> [(Double,Double)] -> Double
@@ -45,26 +45,27 @@ programFitnessOverInputs x xs = -(sum $
                                   xs)
                                 - programLengthFitnessWeighting*(fromIntegral $ treeSize x)
 
-randomTree :: (RandomGen g) => Int -> g -> (Tree, Int, g)
-randomTree d g = if d >= maximumTreeDepth
-  then
-  let (value,g2) = random g in
-        (Leaf (Value value), d + 1, g2)
-  else
-  let (x, g2) = randomR (0, 2::Int) g in
-    case x of
-      0 -> let (value, g3) = random g2 in
-        (Leaf (Value value), d, g3)
-      1 -> let (operation, g3) = random g2
-               (left, d2, g4) = randomTree (d + 1) g3
-               (right, d3, g5) = randomTree (d + 1) g4 in
-             ((Branch operation left right), d3, g5)
-      2 -> (Leaf X, d, g2)
+randomTree :: (RandomGen g) => g -> (Tree, g)
+randomTree g = (\(x, _, z) -> (x, z)) $ f 0 g where
+  f = (\d g -> if d >= maximumTreeDepth
+               then
+                 let (value, g2) = random g in
+                   (Leaf (Value value), d + 1, g2)
+               else
+                 let (x, g2) = randomR (0, 2 :: Int) g in
+                   case x of
+                     0 -> let (value, g3) = random g2 in
+                       (Leaf (Value value), d, g3)
+                     1 -> let (operation, g3) = random g2
+                              (left, d2, g4) = f (d + 1) g3
+                              (right, d3, g5) = f (d + 1) g4 in
+                            ((Branch operation left right), d3, g5)
+                     2 -> (Leaf X, d, g2))
 
 prependAndThread f (xs, g) = (\(x, g) -> if (containsVariables x) then (x:xs, g) else (xs, g)) $ f g
 
 trees :: (RandomGen g) => Int -> g -> ([Tree], g)
-trees n g = iterate (prependAndThread (\g -> let (x, y, z) = randomTree 0 g in (x,z))) ([],g) !! n
+trees n g = iterate (prependAndThread randomTree) ([],g) !! n
 
 -- Operate can only operate on values, not variables
 operate :: Operation -> (Variable Double) -> (Variable Double) -> (Variable Double) 
@@ -138,7 +139,7 @@ subtreeMutation :: (RandomGen a) => Tree -> a -> (Tree, a)
 subtreeMutation t g = let labels = labelTree t
                           (p, g2) = randomR (0, length labels - 1) g
                           n = elemAt p labels
-                          (t2, _, g3) = randomTree 0 g2 in
+                          (t2, g3) = randomTree g2 in
                         (substituteNthNode t t2 n, g3)
 
 substitute :: Tree -> Tree -> Tree
