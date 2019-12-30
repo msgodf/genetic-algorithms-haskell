@@ -15,6 +15,8 @@ import Data.Set
 data Function = Add | Subtract | Multiply | Divide deriving (Show, Eq)
 
 maximumTreeDepth = 8
+mutationProbability = 0.1
+programLengthFitnessWeighting = 1.0
 
 instance Ord Tree where
   a `compare` b = fitness a `compare` fitness b
@@ -22,7 +24,7 @@ instance Ord Tree where
 
 instance Genetic Tree where
   fitness = programFitnessOverInputs targets
-  mutate = subtreeMutation
+  mutate = subtreeMutation mutationProbability
   crossover = crossoverNodes
 
 instance Random Function where
@@ -135,12 +137,15 @@ substituteNthNode t1 t2 n = f t1 t2 n 0 where
                               then Branch o a b
                               else Branch o (f a t2 n (2*m + 1)) (f b t2 n (2*m + 2)))
 
-subtreeMutation :: (RandomGen a) => Tree -> a -> (Tree, a)
-subtreeMutation t g = let labels = labelTree t
-                          (p, g2) = randomR (0, length labels - 1) g
-                          n = elemAt p labels
-                          (t2, g3) = randomTree g2 in
-                        (substituteNthNode t t2 n, g3)
+subtreeMutation :: (RandomGen a) => Double -> Tree -> a -> (Tree, a)
+subtreeMutation p t g  = let (r, g2) = randomR (0, 1 :: (Double)) g in
+                          if r > p
+                          then (t, g2)
+                          else let labels = labelTree t
+                                   (p, g3) = randomR (0, length labels - 1) g2
+                                   n = elemAt p labels
+                                   (t2, g4) = randomTree g3 in
+                            (substituteNthNode t t2 n, g4)
 
 substitute :: Tree -> Tree -> Tree
 substitute (Leaf X) v = v
