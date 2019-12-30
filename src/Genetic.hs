@@ -14,10 +14,15 @@ class (Ord a) => (Genetic a) where
   mutate :: (RandomGen b) => a -> b -> (a, b)
   crossover :: (RandomGen b) => (a,a) -> b -> ((a,a), b)
 
+selection :: (Genetic a) => [a] -> ([a], [a])
+selection xs = (alpha:beta:[], rest) where
+  alpha:beta:rest = reverse $ sort xs
+
 -- A single step of the algorithm
 step :: (Genetic a, RandomGen b) => ([a], b) -> ([a], b)
 step (xs, g) =
-  let alpha:beta:rest = reverse $ sort xs
+  let
+      (alpha:beta:_, rest) = selection xs
       remainingPopulation = take ((length rest) - 2) rest
       ((gamma, delta), g2) = crossover (alpha, beta) g
       (gamma2, g3) = mutate gamma g2

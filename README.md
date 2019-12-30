@@ -14,3 +14,9 @@ Fitness is calculated by taking an list of target (input, output) pairs, evaluat
 Mutation is implemented as subtree mutation (Koza 1992), where a randomly chosen node (and its descendants) is replaced with a randomly generated subtree.
 
 Crossover is implemented as subtree crossover.
+
+## Todo
+
+Selection methods, that work for all population types.
+Different tree mutation operators
+Grow trees differently

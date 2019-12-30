@@ -89,7 +89,7 @@ treeDepth :: Tree -> Int
 treeDepth t = f t 0 where
   f = (\t d -> case t of (Branch o a b) -> if m > n
                                            then m
-                                           else n where m = f a(d + 1)
+                                           else n where m = f a (d + 1)
                                                         n = f b (d + 1)
                          (Leaf a) -> d)
 
