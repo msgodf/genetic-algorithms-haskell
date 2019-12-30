@@ -3,8 +3,8 @@ module Tree
   , evaluate
   , substitute
   , Tree(..)
-  , Variable(..)
-  , Operation(..)
+  , Terminal(..)
+  , Function(..)
   ) where
 
 import Genetic (Genetic(..))
@@ -12,7 +12,7 @@ import System.Random
 import Data.Ord (Ord(..))
 import Data.Set
 
-data Operation = Add | Subtract | Multiply | Divide deriving (Show, Eq)
+data Function = Add | Subtract | Multiply | Divide deriving (Show, Eq)
 
 maximumTreeDepth = 8
 
@@ -25,13 +25,13 @@ instance Genetic Tree where
   mutate = subtreeMutation
   crossover = crossoverNodes
 
-instance Random Operation where
+instance Random Function where
   random g = let (x, g2) = randomR (0, 3 :: Int) g in ([Add, Subtract, Multiply, Divide] !! x, g2)
   randomR _ g = random g
 
-data Variable a = Value a | X deriving (Show, Eq)
+data Terminal a = Constant a | X deriving (Show, Eq)
 
-data Tree = Leaf (Variable Double) | Branch Operation Tree Tree deriving (Show, Eq)
+data Tree = Leaf (Terminal Double) | Branch Function Tree Tree deriving (Show, Eq)
 
 instance Random Tree where
   random = randomTree
@@ -39,8 +39,8 @@ instance Random Tree where
 
 programFitnessOverInputs :: [(Double, Double)] -> Tree -> Double
 programFitnessOverInputs xs x = -(sum $
-                                  fmap (\(input, output) -> let (Leaf (Value v)) = evaluate $
-                                                                  substitute x (Leaf (Value input)) in
+                                  fmap (\(input, output) -> let (Leaf (Constant v)) = evaluate $
+                                                                  substitute x (Leaf (Constant input)) in
                                                               abs(output - v))
                                   xs)
                                 - programLengthFitnessWeighting*(fromIntegral $ treeSize x)
@@ -50,12 +50,12 @@ randomTree g = (\(x, _, z) -> (x, z)) $ f 0 g where
   f = (\d g -> if d >= maximumTreeDepth
                then
                  let (value, g2) = random g in
-                   (Leaf (Value value), d + 1, g2)
+                   (Leaf (Constant value), d + 1, g2)
                else
                  let (x, g2) = randomR (0, 2 :: Int) g in
                    case x of
                      0 -> let (value, g3) = random g2 in
-                       (Leaf (Value value), d, g3)
+                       (Leaf (Constant value), d, g3)
                      1 -> let (operation, g3) = random g2
                               (left, d2, g4) = f (d + 1) g3
                               (right, d3, g5) = f (d + 1) g4 in
@@ -68,11 +68,11 @@ trees :: (RandomGen g) => Int -> g -> ([Tree], g)
 trees n g = iterate (prependAndThread randomTree) ([],g) !! n
 
 -- Operate can only operate on values, not variables
-operate :: Operation -> (Variable Double) -> (Variable Double) -> (Variable Double) 
-operate Add (Value x) (Value y) = (Value (x + y))
-operate Subtract (Value x) (Value y) = (Value (x - y))
-operate Multiply (Value x) (Value y) = (Value (x * y))
-operate Divide (Value x) (Value y) = if x == 0 || y == 0 || x == y then (Value 1e18) else (Value (x / y))
+operate :: Function -> (Terminal Double) -> (Terminal Double) -> (Terminal Double) 
+operate Add (Constant x) (Constant y) = (Constant (x + y))
+operate Subtract (Constant x) (Constant y) = (Constant (x - y))
+operate Multiply (Constant x) (Constant y) = (Constant (x * y))
+operate Divide (Constant x) (Constant y) = if x == 0 || y == 0 || x == y then (Constant 1e18) else (Constant (x / y))
 
 evaluate :: Tree -> Tree
 evaluate (Leaf a) = (Leaf a)
@@ -114,7 +114,7 @@ swapNodes ts n = f ts n 0 where
 replaceFirstLeafWithVariable :: Tree -> Tree
 replaceFirstLeafWithVariable t = fst $ f t where
   f = (\t -> case t of
-          (Leaf (Value t)) -> ((Leaf X), True)
+          (Leaf (Constant t)) -> ((Leaf X), True)
           (Branch o a b) -> let (t1, r1) = f a
                                 (t2, r2) = f b in
                               if r1
