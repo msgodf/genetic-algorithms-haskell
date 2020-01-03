@@ -10,44 +10,66 @@ module Tree
 import Genetic (Genetic(..))
 import System.Random
 import Data.Ord (Ord(..))
-import Data.Set
+import Data.Set ( Set
+                , elemAt
+                , intersection
+                , union
+                , singleton
+                , empty)
 
 data Function = Add | Subtract | Multiply | Divide deriving (Show, Eq)
 
 maximumTreeDepth = 8
 mutationProbability = 0.1
 programLengthFitnessWeighting = 1.0
+targets = [(-10,-10),(0,0),(10,10)]
 
-instance Ord Tree where
+instance (Eq a, Num a, Fractional a, Random a, Fit a) => Ord (Tree a) where
   a `compare` b = fitness a `compare` fitness b
   (<=) a b = fitness a <= fitness b
 
-instance Genetic Tree where
-  fitness = programFitnessOverInputs targets
+instance (Eq a, Num a, Fractional a, Random a, Fit a) => Genetic (Tree a) where
+  fitness = programFitnessOverInputs []
   mutate = subtreeMutation mutationProbability
   crossover = crossoverNodes
 
+class (Fit a) where
+  difference :: a -> a -> Double
+
+instance Fit Double where
+  difference x y = abs (x - y)
+  
 instance Random Function where
   random g = let (x, g2) = randomR (0, 3 :: Int) g in ([Add, Subtract, Multiply, Divide] !! x, g2)
   randomR _ g = random g
 
 data Terminal a = Constant a | X deriving (Show, Eq)
 
-data Tree = Leaf (Terminal Double) | Branch Function Tree Tree deriving (Show, Eq)
+data Tree a = Leaf (Terminal a) | Branch Function (Tree a) (Tree a) deriving (Show, Eq)
 
-instance Random Tree where
+--instance Foldable Tree where
+--  foldr f z (Leaf x) =  f x z
+--  foldr f z (Branch o l r) = foldr f (f k (foldr f z r))
+  
+instance (Num a, Random a) => Random (Tree a) where
   random = randomTree
   randomR _ = random
 
-programFitnessOverInputs :: [(Double, Double)] -> Tree -> Double
-programFitnessOverInputs xs x = -(sum $
-                                  fmap (\(input, output) -> let (Leaf (Constant v)) = evaluate $
-                                                                  substitute x (Leaf (Constant input)) in
-                                                              abs(output - v))
-                                  xs)
-                                - programLengthFitnessWeighting*(fromIntegral $ treeSize x)
+-- How to get this function to always return a double (because I don't want to push the genericity all the way up to the user)
+programFitnessOverInputs :: (Num a, Fractional a, Fit a) => [(a, a)] -> (Tree a) -> Double
+programFitnessOverInputs xs x = case pp of
+  (Leaf (Constant ll)) -> difference ll (snd (xs !! 0))
+  where pp = evaluate $ (substitute x (Leaf (Constant v))) where v = fst (xs !! 0)
 
-randomTree :: (RandomGen g) => g -> (Tree, g)
+
+--(sum $
+                               --   fmap (\(input, output) -> let (Leaf (Constant v)) = evaluate $
+                                      --                            substitute x (Leaf (Constant input)) in
+                                        --                      abs(output - v))
+                                 -- xs)
+                                --- programLengthFitnessWeighting*(fromIntegral $ treeSize x)
+
+randomTree :: (RandomGen g, Num a, Random a) => g -> ((Tree a), g)
 randomTree g = (\(x, _, z) -> (x, z)) $ f 0 g where
   f = (\d g -> if d >= maximumTreeDepth
                then
@@ -66,26 +88,26 @@ randomTree g = (\(x, _, z) -> (x, z)) $ f 0 g where
 
 prependAndThread f (xs, g) = (\(x, g) -> if (containsVariables x) then (x:xs, g) else (xs, g)) $ f g
 
-trees :: (RandomGen g) => Int -> g -> ([Tree], g)
+trees :: (RandomGen g, Num a, Random a) => Int -> g -> ([(Tree a)], g)
 trees n g = iterate (prependAndThread randomTree) ([],g) !! n
 
 -- Operate can only operate on values, not variables
-operate :: Function -> (Terminal Double) -> (Terminal Double) -> (Terminal Double) 
+operate :: (Num a, Fractional a) => Function -> (Terminal a) -> (Terminal a) -> (Terminal a) 
 operate Add (Constant x) (Constant y) = (Constant (x + y))
 operate Subtract (Constant x) (Constant y) = (Constant (x - y))
 operate Multiply (Constant x) (Constant y) = (Constant (x * y))
-operate Divide (Constant x) (Constant y) = if x == 0 || y == 0 || x == y then (Constant 1e18) else (Constant (x / y))
+operate Divide (Constant x) (Constant y) = (Constant (x / y)) --if x == 0 || y == 0 || x == y then (Constant 1e18) else (Constant (x / y))
 
-evaluate :: Tree -> Tree
+evaluate :: (Num a, Fractional a) => (Tree a) -> (Tree a)
 evaluate (Leaf a) = (Leaf a)
 evaluate (Branch o (Leaf a) (Leaf b)) = Leaf $ operate o a b
 evaluate (Branch o a b) = evaluate $ Branch o (evaluate a) (evaluate b)
 
-flipBranches :: Tree -> Tree
+flipBranches :: (Tree a) -> (Tree a)
 flipBranches (Branch o a b) = Branch o b a
 flipBranches (Leaf a) = Leaf a
 
-treeDepth :: Tree -> Int
+treeDepth :: (Tree a) -> Int
 treeDepth t = f t 0 where
   f = (\t d -> case t of (Branch o a b) -> if m > n
                                            then m
@@ -93,17 +115,17 @@ treeDepth t = f t 0 where
                                                         n = f b (d + 1)
                          (Leaf a) -> d)
 
-labelTree :: Tree -> Set Int
+labelTree :: (Tree a) -> Set Int
 labelTree t = f t 0 empty where
   f = (\t n xs -> case t of (Leaf a) -> (singleton n) `union` xs
                             (Branch o a b) -> (singleton n) `union`
                                               (f a (2*n + 1) xs) `union`
                                               (f b (2*n + 2) xs))
 
-intersectionOfTreeLabels :: Tree -> Tree -> Set Int
+intersectionOfTreeLabels :: (Tree a) -> (Tree a) -> Set Int
 intersectionOfTreeLabels t1 t2 = (labelTree t2) `intersection` (labelTree t1)
 
-swapNodes :: (Tree, Tree) -> Int -> (Tree, Tree)
+swapNodes :: ((Tree a), (Tree a)) -> Int -> ((Tree a), (Tree a))
 swapNodes ts n = f ts n 0 where
   f = (\ts n m -> case ts of
           (Branch o1 a b, Branch o2 c d) -> let (a2, c2) = f (a, c) (2*n + 1) m
@@ -113,7 +135,7 @@ swapNodes ts n = f ts n 0 where
                                               else (Branch o1 a2 b2, Branch o2 c2 d2)
           (a, b) -> if n == m then (b, a) else (a, b))
 
-replaceFirstLeafWithVariable :: Tree -> Tree
+replaceFirstLeafWithVariable :: (Tree a) -> (Tree a)
 replaceFirstLeafWithVariable t = fst $ f t where
   f = (\t -> case t of
           (Leaf (Constant t)) -> ((Leaf X), True)
@@ -127,7 +149,7 @@ replaceFirstLeafWithVariable t = fst $ f t where
                                 else (Branch o a b, False)
           t -> (t, False))
 
-substituteNthNode :: Tree -> Tree -> Int -> Tree
+substituteNthNode :: (Tree a) -> (Tree a) -> Int -> (Tree a)
 substituteNthNode t1 t2 n = f t1 t2 n 0 where
   f = (\t1 t2 n m -> case t1 of
           (Leaf a) -> if n == m then t2 else (Leaf a)
@@ -137,7 +159,7 @@ substituteNthNode t1 t2 n = f t1 t2 n 0 where
                               then Branch o a b
                               else Branch o (f a t2 n (2*m + 1)) (f b t2 n (2*m + 2)))
 
-subtreeMutation :: (RandomGen a) => Double -> Tree -> a -> (Tree, a)
+subtreeMutation :: (RandomGen g, Num a, Random a) => Double -> (Tree a) -> g -> ((Tree a), g)
 subtreeMutation p t g  = let (r, g2) = randomR (0, 1 :: (Double)) g in
                           if r > p
                           then (t, g2)
@@ -147,20 +169,21 @@ subtreeMutation p t g  = let (r, g2) = randomR (0, 1 :: (Double)) g in
                                    (t2, g4) = randomTree g3 in
                             (substituteNthNode t t2 n, g4)
 
-substitute :: Tree -> Tree -> Tree
+substitute :: (Tree a) -> (Tree a) -> (Tree a)
 substitute (Leaf X) v = v
 substitute (Branch o a b) n = Branch o (substitute a n) (substitute b n)
 substitute t n = t
 
-crossoverNodes :: (RandomGen g) => (Tree, Tree) -> g -> ((Tree, Tree), g)
+crossoverNodes :: (RandomGen g) => ((Tree a), (Tree a)) -> g -> (((Tree a), (Tree a)), g)
 crossoverNodes (a, b) g = let intersectionSet = intersectionOfTreeLabels a b
                               (crossoverPoint, g2) = randomR (0, ((length intersectionSet) - 1)) g in
                            (swapNodes (a,b) (elemAt crossoverPoint intersectionSet), g2)
 
-containsVariables :: Tree -> Bool
+containsVariables :: (Tree a) -> Bool
 containsVariables (Branch o a b) = containsVariables a || containsVariables b
 containsVariables (Leaf X) = True
 containsVariables x = False
 
-treeSize :: Tree -> Int
+treeSize :: (Tree a) -> Int
 treeSize x = length $ labelTree x
+

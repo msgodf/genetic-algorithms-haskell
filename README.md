@@ -17,6 +17,6 @@ Crossover is implemented as subtree crossover.
 
 ## Todo
 
-Selection methods, that work for all population types.
-Different tree mutation operators
-Grow trees differently
+* Selection methods, that work for all population types.
+* Different tree mutation operators
+* Grow trees differently
