@@ -1,3 +1,5 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Tree
   ( trees
   , evaluate
@@ -17,18 +19,32 @@ import Data.Set ( Set
                 , singleton
                 , empty)
 
-data Function = Add | Subtract | Multiply | Divide deriving (Show, Eq)
+-- Implement operate for Function
+data Function a b = Add | Subtract | Multiply | Divide deriving (Show, Eq)
+
+-- Absolutely pointless Functor implementation for this phantom typed datatype...
+instance Functor (Function a) where
+  fmap f Add = Add
+  fmap f Subtract = Subtract
+  fmap f Multiply = Multiply
+  fmap f Divide = Divide
+  
+--add :: a -> Function a
+--add x = Add x
+
+-- Current problem is how to use a as more than a phantom type parameter whilst also
+-- being able to randomly generate instances of it without knowing the type parameter
 
 maximumTreeDepth = 8
 mutationProbability = 0.1
 programLengthFitnessWeighting = 1.0
 targets = [(-10,-10),(0,0),(10,10)]
 
-instance (Eq a, Num a, Fractional a, Random a, Example a) => Ord (Tree a) where
+instance (Eq a, Eq b, Num a, Fractional a, Random a, Example a, Random b) => Ord (Tree a b) where
   a `compare` b = fitness a `compare` fitness b
   (<=) a b = fitness a <= fitness b
 
-instance (Eq a, Num a, Fractional a, Random a, Example a) => Genetic (Tree a) where
+instance (Eq a, Eq b, Num a, Fractional a, Random a, Example a, Random b) => Genetic (Tree a b) where
   fitness x = 0 :: Double --programFitnessOverInputs examples
   mutate = subtreeMutation mutationProbability
   crossover = crossoverNodes
@@ -45,29 +61,30 @@ class (Fit a) where
 instance Fit Double where
   difference x y = abs (x - y)
 
-instance Random Function where
+instance Random (Function a b) where
   random g = let (x, g2) = randomR (0, 3 :: Int) g in ([Add, Subtract, Multiply, Divide] !! x, g2)
   randomR _ g = random g
 
 data Terminal a = Constant a | X deriving (Show, Eq)
 
-data Tree a = Leaf (Terminal a) | Branch Function (Tree a) (Tree a) deriving (Show, Eq)
+-- Let's make the function place a type parameter, so now can be anything (but needs to implement Operator in order to be used as a program)
+data Tree a b = Leaf (Terminal a) | Branch b (Tree a b) (Tree a b) deriving (Show, Eq)
 
-data Program a = Program (Tree a)
+data Program a b = Program (Tree a b)
 
 -- how can I get the operation into this?
 -- so that I could implement evaluate
 -- evaluate isn't really a use of fold, because the function is the operation
 -- perhaps, it is, perhaps f could apply o to l and r if they're both leaves
 
-instance Foldable Tree where
-  foldr f z (Leaf (Constant x)) = f x z
-  foldr f z (Branch o l r) = foldr f (foldr f (foldr f z r) l) o
+--instance Foldable (Tree b) where
+--  foldr f z (Leaf (Constant x)) = f x z
+--  foldr f z (Branch o l r) = foldr f (foldr f (foldr f z r) l) o
 
 --  foldMap f (Leaf (Constant x)) = f x 
 --  foldMap f (Branch o l r) = foldMap f l `mappend` foldMap f r
   
-instance (Num a, Random a) => Random (Tree a) where
+instance (Num a, Random a, Random b) => Random (Tree a b) where
   random = randomTree
   randomR _ = random
 
@@ -75,7 +92,7 @@ maxOr0 [] = 0
 maxOr0 xs = maximum xs
 
 -- How to get this function to always return a double (because I don't want to push the genericity all the way up to the user)
-programFitnessOverInputs :: (Num a, Fractional a, Fit a) => [(a, a)] -> (Tree a) -> a
+programFitnessOverInputs :: (Num a, Fractional a, Fit a) => [(a, a)] -> (Tree a b) -> a
 programFitnessOverInputs xs x = case pp of
                                   (Leaf (Constant ll)) -> difference ll (snd (xs !! 0))
   where pp = evaluate $ (substitute x (Leaf (Constant v))) where v = fst (xs !! 0)
@@ -88,7 +105,7 @@ programFitnessOverInputs xs x = case pp of
                                  -- xs)
                                 --- programLengthFitnessWeighting*(fromIntegral $ treeSize x)
 
-randomTree :: (RandomGen g, Num a, Random a) => g -> ((Tree a), g)
+randomTree :: (RandomGen g, Num a, Random a, Random b) => g -> ((Tree a b), g)
 randomTree g = (\(x, _, z) -> (x, z)) $ f 0 g where
   f = (\d g -> if d >= maximumTreeDepth
                then
@@ -107,26 +124,34 @@ randomTree g = (\(x, _, z) -> (x, z)) $ f 0 g where
 
 prependAndThread f (xs, g) = (\(x, g) -> if (containsVariables x) then (x:xs, g) else (xs, g)) $ f g
 
-trees :: (RandomGen g, Num a, Random a) => Int -> g -> ([(Tree a)], g)
+trees :: (RandomGen g, Num a, Random a, Random b) => Int -> g -> ([(Tree a b)], g)
 trees n g = iterate (prependAndThread randomTree) ([],g) !! n
 
 -- Operate can only operate on values, not variables
-operate :: (Num a, Fractional a) => Function -> (Terminal a) -> (Terminal a) -> (Terminal a) 
-operate Add (Constant x) (Constant y) = (Constant (x + y))
-operate Subtract (Constant x) (Constant y) = (Constant (x - y))
-operate Multiply (Constant x) (Constant y) = (Constant (x * y))
-operate Divide (Constant x) (Constant y) = (Constant (x / y)) --if x == 0 || y == 0 || x == y then (Constant 1e18) else (Constant (x / y))
+class (Functor m) => (Operator m a) where
+  operate :: (m a) -> (Terminal a) -> (Terminal a) -> (Terminal a)
 
-evaluate :: (Num a, Fractional a) => (Tree a) -> (Tree a)
+-- Operator needs to be implemented for any monad? functor? anything that has a type parameter!
+-- This should be an implementation for a type specific version of Function
+instance (Num a, Num b) => Operator (Function a) b where
+  operate Add (Constant x) (Constant y) = Constant (x + y)
+  --operate Add (Constant x) _ = Constant (x + 1)
+--instance (Num a, Fractional a) => Operator (Function a) where
+--  operate Add (Constant x) (Constant y) = (Constant (x + y))
+--  operate Subtract (Constant x) (Constant y) = (Constant (x - y))
+--  operate Multiply (Constant x) (Constant y) = (Constant (x * y))
+--  operate Divide (Constant x) (Constant y) = (Constant (x / y)) --if x == 0 || y == 0 || x == y then (Constant 1e18) else (Constant (x / y))
+
+evaluate :: (Num a, Fractional a) => (Tree a b) -> (Tree a b)
 evaluate (Leaf a) = (Leaf a)
-evaluate (Branch o (Leaf a) (Leaf b)) = Leaf $ operate o a b
+evaluate (Branch o (Leaf a) (Leaf b)) = Leaf a -- $ operate o a b
 evaluate (Branch o a b) = evaluate $ Branch o (evaluate a) (evaluate b)
 
-flipBranches :: (Tree a) -> (Tree a)
+flipBranches :: (Tree a b) -> (Tree a b)
 flipBranches (Branch o a b) = Branch o b a
 flipBranches (Leaf a) = Leaf a
 
-treeDepth :: (Tree a) -> Int
+treeDepth :: (Tree a b) -> Int
 treeDepth t = f t 0 where
   f = (\t d -> case t of (Branch o a b) -> if m > n
                                            then m
@@ -134,17 +159,17 @@ treeDepth t = f t 0 where
                                                         n = f b (d + 1)
                          (Leaf a) -> d)
 
-labelTree :: (Tree a) -> Set Int
+labelTree :: (Tree a b) -> Set Int
 labelTree t = f t 0 empty where
   f = (\t n xs -> case t of (Leaf a) -> (singleton n) `union` xs
                             (Branch o a b) -> (singleton n) `union`
                                               (f a (2*n + 1) xs) `union`
                                               (f b (2*n + 2) xs))
 
-intersectionOfTreeLabels :: (Tree a) -> (Tree a) -> Set Int
+intersectionOfTreeLabels :: (Tree a b) -> (Tree a b) -> Set Int
 intersectionOfTreeLabels t1 t2 = (labelTree t2) `intersection` (labelTree t1)
 
-swapNodes :: ((Tree a), (Tree a)) -> Int -> ((Tree a), (Tree a))
+swapNodes :: ((Tree a b), (Tree a b)) -> Int -> ((Tree a b), (Tree a b))
 swapNodes ts n = f ts n 0 where
   f = (\ts n m -> case ts of
           (Branch o1 a b, Branch o2 c d) -> let (a2, c2) = f (a, c) (2*n + 1) m
@@ -154,7 +179,7 @@ swapNodes ts n = f ts n 0 where
                                               else (Branch o1 a2 b2, Branch o2 c2 d2)
           (a, b) -> if n == m then (b, a) else (a, b))
 
-replaceFirstLeafWithVariable :: (Tree a) -> (Tree a)
+replaceFirstLeafWithVariable :: (Tree a b) -> (Tree a b)
 replaceFirstLeafWithVariable t = fst $ f t where
   f = (\t -> case t of
           (Leaf (Constant t)) -> ((Leaf X), True)
@@ -168,7 +193,7 @@ replaceFirstLeafWithVariable t = fst $ f t where
                                 else (Branch o a b, False)
           t -> (t, False))
 
-substituteNthNode :: (Tree a) -> (Tree a) -> Int -> (Tree a)
+substituteNthNode :: (Tree a b) -> (Tree a b) -> Int -> (Tree a b)
 substituteNthNode t1 t2 n = f t1 t2 n 0 where
   f = (\t1 t2 n m -> case t1 of
           (Leaf a) -> if n == m then t2 else (Leaf a)
@@ -178,7 +203,7 @@ substituteNthNode t1 t2 n = f t1 t2 n 0 where
                               then Branch o a b
                               else Branch o (f a t2 n (2*m + 1)) (f b t2 n (2*m + 2)))
 
-subtreeMutation :: (RandomGen g, Num a, Random a) => Double -> (Tree a) -> g -> ((Tree a), g)
+subtreeMutation :: (RandomGen g, Num a, Random a, Random b) => Double -> (Tree a b) -> g -> ((Tree a b), g)
 subtreeMutation p t g  = let (r, g2) = randomR (0, 1 :: (Double)) g in
                           if r > p
                           then (t, g2)
@@ -188,21 +213,21 @@ subtreeMutation p t g  = let (r, g2) = randomR (0, 1 :: (Double)) g in
                                    (t2, g4) = randomTree g3 in
                             (substituteNthNode t t2 n, g4)
 
-substitute :: (Tree a) -> (Tree a) -> (Tree a)
+substitute :: (Tree a b) -> (Tree a b) -> (Tree a b)
 substitute (Leaf X) v = v
 substitute (Branch o a b) n = Branch o (substitute a n) (substitute b n)
 substitute t n = t
 
-crossoverNodes :: (RandomGen g) => ((Tree a), (Tree a)) -> g -> (((Tree a), (Tree a)), g)
+crossoverNodes :: (RandomGen g) => ((Tree a b), (Tree a b)) -> g -> (((Tree a b), (Tree a b)), g)
 crossoverNodes (a, b) g = let intersectionSet = intersectionOfTreeLabels a b
                               (crossoverPoint, g2) = randomR (0, ((length intersectionSet) - 1)) g in
                            (swapNodes (a,b) (elemAt crossoverPoint intersectionSet), g2)
 
-containsVariables :: (Tree a) -> Bool
+containsVariables :: (Tree a b) -> Bool
 containsVariables (Branch o a b) = containsVariables a || containsVariables b
 containsVariables (Leaf X) = True
 containsVariables x = False
 
-treeSize :: (Tree a) -> Int
+treeSize :: (Tree a b) -> Int
 treeSize x = length $ labelTree x
 
