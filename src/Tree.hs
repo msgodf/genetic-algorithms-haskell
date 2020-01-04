@@ -35,15 +35,15 @@ instance (Num a, Fractional a) => Operator ArithmeticFunction a where
   operate Multiply (Constant x) (Constant y) = (Constant (x * y))
   operate Divide (Constant x) (Constant y) = (Constant (x / y))
 
-instance (Eq a, Eq b, Num a, Fractional a, Random a, Example a, Random b) => Ord (Tree a b) where
+instance (Fractional b, Ord b, Eq (a b), Example b, Random b, Num b, Num (a b), Random (a b), Operator a b) => Ord (Tree a b) where
   a `compare` b = fitness a `compare` fitness b
   (<=) a b = fitness a <= fitness b
 
-instance (Eq a, Eq b, Num a, Fractional a, Random a, Example a, Random b) => Genetic (Tree a b) where
-  fitness x = 0 :: Double --programFitnessOverInputs examples
+instance (Fractional b, Ord b, Random b, Eq (a b), Example b, Random (a b), Num b, Num (a b), Operator a b) => Genetic (Tree a) b where
+  fitness x = programFitnessOverInputs examples x --fst (examples !! 0 ) --
   mutate = subtreeMutation mutationProbability
   crossover = crossoverNodes
-
+  
 class (Fit a) => (Example a) where
   examples :: [(a,a)]
 
@@ -62,7 +62,7 @@ instance Random (ArithmeticFunction a) where
 
 data Terminal a = Constant a | X deriving (Show, Eq)
 
-data Tree a b = Leaf (Terminal a) | Branch b (Tree a b) (Tree a b) deriving (Show, Eq)
+data Tree a b = Leaf (Terminal b) | Branch (a b) (Tree a b) (Tree a b) deriving (Show, Eq)
 
 -- how can I get the operation into this?
 -- so that I could implement evaluate
@@ -76,7 +76,7 @@ data Tree a b = Leaf (Terminal a) | Branch b (Tree a b) (Tree a b) deriving (Sho
 --  foldMap f (Leaf (Constant x)) = f x 
 --  foldMap f (Branch o l r) = foldMap f l `mappend` foldMap f r
   
-instance (Num a, Random a, Random b) => Random (Tree a b) where
+instance (Num b, Random b, Random (a b), Num (a b), Operator a b) => Random (Tree a b) where
   random = randomTree
   randomR _ = random
 
@@ -84,7 +84,7 @@ maxOr0 [] = 0
 maxOr0 xs = maximum xs
 
 -- How to get this function to always return a double (because I don't want to push the genericity all the way up to the user)
-programFitnessOverInputs :: (Num a, Fractional a, Fit a, Operator b a) => [(a, a)] -> (Tree a (b a)) -> a
+programFitnessOverInputs :: (Num b, Fractional b, Fit b, Operator a b) => [(b, b)] -> Tree a b -> b
 programFitnessOverInputs xs x = case pp of
                                   (Leaf (Constant ll)) -> difference ll (snd (xs !! 0))
   where pp = evaluate $ (substitute x (Leaf (Constant v))) where v = fst (xs !! 0)
@@ -97,7 +97,7 @@ programFitnessOverInputs xs x = case pp of
                                  -- xs)
                                 --- programLengthFitnessWeighting*(fromIntegral $ treeSize x)
 
-randomTree :: (RandomGen g, Num a, Random a, Random b) => g -> (Tree a b, g)
+randomTree :: (RandomGen g, Num b, Random b, Random (a b)) => g -> (Tree a b, g)
 randomTree g = (\(x, _, z) -> (x, z)) $ f 0 g where
   f = (\d g -> if d >= maximumTreeDepth
                then
@@ -116,10 +116,10 @@ randomTree g = (\(x, _, z) -> (x, z)) $ f 0 g where
 
 prependAndThread f (xs, g) = (\(x, g) -> if (containsVariables x) then (x:xs, g) else (xs, g)) $ f g
 
-trees :: (RandomGen g, Num a, Random a, Random b) => Int -> g -> ([(Tree a b)], g)
-trees n g = iterate (prependAndThread randomTree) ([],g) !! n
+trees :: (RandomGen g, Num b, Random b, Random (a b)) => Int -> g -> ([(Tree a b)], g)
+trees n g = iterate (prependAndThread randomTree) ([], g) !! n
   
-evaluate :: (Num a, Fractional a, Operator b a) => (Tree a (b a)) -> (Tree a (b a))
+evaluate :: (Num b, Fractional b, Operator a b) => (Tree a b) -> (Tree a b)
 evaluate (Leaf a) = (Leaf a)
 evaluate (Branch o (Leaf a) (Leaf b)) = Leaf (operate o a b)
 evaluate (Branch o a b) = evaluate $ Branch o (evaluate a) (evaluate b)
@@ -180,7 +180,7 @@ substituteNthNode t1 t2 n = f t1 t2 n 0 where
                               then Branch o a b
                               else Branch o (f a t2 n (2*m + 1)) (f b t2 n (2*m + 2)))
 
-subtreeMutation :: (RandomGen g, Num a, Random a, Random b) => Double -> (Tree a b) -> g -> ((Tree a b), g)
+subtreeMutation :: (RandomGen g, Num b, Random b, Random (a b), Num (a b), Operator a b) => Double -> (Tree a b) -> g -> ((Tree a b), g)
 subtreeMutation p t g  = let (r, g2) = randomR (0, 1 :: (Double)) g in
                           if r > p
                           then (t, g2)
@@ -208,3 +208,4 @@ containsVariables x = False
 treeSize :: (Tree a b) -> Int
 treeSize x = length $ labelTree x
 
+waste g = (\(_,g) -> g) $ (random g :: (Int,StdGen))
