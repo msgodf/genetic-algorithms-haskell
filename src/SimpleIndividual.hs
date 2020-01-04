@@ -48,11 +48,11 @@ randomGenes :: (RandomGen a) => Int -> a -> ([Gene], a)
 randomGenes n g = iterate (prependAndThread random) ([], g) !! n
 
 -- Generate a single Individual
-individual :: (RandomGen a) => Int -> Float -> a -> ((Individual a), a)
+individual :: (RandomGen g) => Int -> Float -> g -> ((Individual a), g)
 individual n p g = let (xs, g2) = randomGenes n g in (Individual xs p, g2)
 
 -- Generate a list of Individuals
-individuals :: (RandomGen a) => Int -> Int -> a -> Float -> ([(Individual a)], a)
+individuals :: (RandomGen g) => Int -> Int -> g -> Float -> ([(Individual a)], g)
 individuals n k g p = iterate (prependAndThread $ individual k p) ([], g) !! n
 
 -- Mutate a single Gene

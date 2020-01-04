@@ -35,11 +35,11 @@ instance (Num a, Fractional a) => Operator ArithmeticFunction a where
   operate Multiply (Constant x) (Constant y) = (Constant (x * y))
   operate Divide (Constant x) (Constant y) = (Constant (x / y))
 
-instance (Fractional b, Ord b, Eq (a b), Example b, Random b, Num b, Num (a b), Random (a b), Operator a b) => Ord (Tree a b) where
+instance (Fractional b, Ord b, Eq (a b), Example b, Random b, Num b, Random (a b), Operator a b) => Ord (Tree a b) where
   a `compare` b = fitness a `compare` fitness b
   (<=) a b = fitness a <= fitness b
 
-instance (Fractional b, Ord b, Random b, Eq (a b), Example b, Random (a b), Num b, Num (a b), Operator a b) => Genetic (Tree a) b where
+instance (Fractional b, Ord b, Random b, Eq (a b), Example b, Random (a b), Num b, Operator a b) => Genetic (Tree a) b where
   fitness x = programFitnessOverInputs examples x --fst (examples !! 0 ) --
   mutate = subtreeMutation mutationProbability
   crossover = crossoverNodes
@@ -180,7 +180,7 @@ substituteNthNode t1 t2 n = f t1 t2 n 0 where
                               then Branch o a b
                               else Branch o (f a t2 n (2*m + 1)) (f b t2 n (2*m + 2)))
 
-subtreeMutation :: (RandomGen g, Num b, Random b, Random (a b), Num (a b), Operator a b) => Double -> (Tree a b) -> g -> ((Tree a b), g)
+subtreeMutation :: (RandomGen g, Num b, Random b, Random (a b), Operator a b) => Double -> (Tree a b) -> g -> ((Tree a b), g)
 subtreeMutation p t g  = let (r, g2) = randomR (0, 1 :: (Double)) g in
                           if r > p
                           then (t, g2)
