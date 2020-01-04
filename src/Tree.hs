@@ -6,7 +6,7 @@ module Tree
   , substitute
   , Tree(..)
   , Terminal(..)
-  , Function(..)
+  , ArithmeticFunction(..)
   ) where
 
 import Genetic (Genetic(..))
@@ -19,24 +19,10 @@ import Data.Set ( Set
                 , singleton
                 , empty)
 
--- Implement operate for Function
-data Function a b = Add | Subtract | Multiply | Divide deriving (Show, Eq)
-
--- Absolutely pointless Functor implementation for this phantom typed datatype...
-instance Functor (Function a) where
-  fmap f Add = Add
-  fmap f Subtract = Subtract
-  fmap f Multiply = Multiply
-  fmap f Divide = Divide
-  
---add :: a -> Function a
---add x = Add x
-
--- Current problem is how to use a as more than a phantom type parameter whilst also
--- being able to randomly generate instances of it without knowing the type parameter
+data ArithmeticFunction a = Add | Subtract | Multiply | Divide deriving (Show, Eq)
 
 maximumTreeDepth = 8
-mutationProbability = 0.1
+mutationProbability = 0.8
 programLengthFitnessWeighting = 1.0
 targets = [(-10,-10),(0,0),(10,10)]
 
@@ -61,16 +47,14 @@ class (Fit a) where
 instance Fit Double where
   difference x y = abs (x - y)
 
-instance Random (Function a b) where
+instance Random (ArithmeticFunction a) where
   random g = let (x, g2) = randomR (0, 3 :: Int) g in ([Add, Subtract, Multiply, Divide] !! x, g2)
   randomR _ g = random g
 
 data Terminal a = Constant a | X deriving (Show, Eq)
 
--- Let's make the function place a type parameter, so now can be anything (but needs to implement Operator in order to be used as a program)
 data Tree a b = Leaf (Terminal a) | Branch b (Tree a b) (Tree a b) deriving (Show, Eq)
 
-data Program a b = Program (Tree a b)
 
 -- how can I get the operation into this?
 -- so that I could implement evaluate
@@ -127,21 +111,15 @@ prependAndThread f (xs, g) = (\(x, g) -> if (containsVariables x) then (x:xs, g)
 trees :: (RandomGen g, Num a, Random a, Random b) => Int -> g -> ([(Tree a b)], g)
 trees n g = iterate (prependAndThread randomTree) ([],g) !! n
 
--- Operate can only operate on values, not variables
-class (Functor m) => (Operator m a) where
-  operate :: (m a) -> (Terminal a) -> (Terminal a) -> (Terminal a)
+class (Operator m a) where
+  operate :: m a -> (Terminal a) -> (Terminal a) -> (Terminal a)
 
--- Operator needs to be implemented for any monad? functor? anything that has a type parameter!
--- This should be an implementation for a type specific version of Function
-instance (Num a, Num b) => Operator (Function a) b where
+instance (Num a, Fractional a) => Operator ArithmeticFunction a where
   operate Add (Constant x) (Constant y) = Constant (x + y)
-  --operate Add (Constant x) _ = Constant (x + 1)
---instance (Num a, Fractional a) => Operator (Function a) where
---  operate Add (Constant x) (Constant y) = (Constant (x + y))
---  operate Subtract (Constant x) (Constant y) = (Constant (x - y))
---  operate Multiply (Constant x) (Constant y) = (Constant (x * y))
---  operate Divide (Constant x) (Constant y) = (Constant (x / y)) --if x == 0 || y == 0 || x == y then (Constant 1e18) else (Constant (x / y))
-
+  operate Subtract (Constant x) (Constant y) = (Constant (x - y))
+  operate Multiply (Constant x) (Constant y) = (Constant (x * y))
+  operate Divide (Constant x) (Constant y) = (Constant (x / y))
+  
 evaluate :: (Num a, Fractional a) => (Tree a b) -> (Tree a b)
 evaluate (Leaf a) = (Leaf a)
 evaluate (Branch o (Leaf a) (Leaf b)) = Leaf a -- $ operate o a b
