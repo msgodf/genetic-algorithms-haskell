@@ -24,21 +24,27 @@ mutationProbability = 0.1
 programLengthFitnessWeighting = 1.0
 targets = [(-10,-10),(0,0),(10,10)]
 
-instance (Eq a, Num a, Fractional a, Random a, Fit a) => Ord (Tree a) where
+instance (Eq a, Num a, Fractional a, Random a, Example a) => Ord (Tree a) where
   a `compare` b = fitness a `compare` fitness b
   (<=) a b = fitness a <= fitness b
 
-instance (Eq a, Num a, Fractional a, Random a, Fit a) => Genetic (Tree a) where
-  fitness = programFitnessOverInputs []
+instance (Eq a, Num a, Fractional a, Random a, Example a) => Genetic (Tree a) where
+  fitness x = 0 :: Double --programFitnessOverInputs examples
   mutate = subtreeMutation mutationProbability
   crossover = crossoverNodes
 
+class (Fit a) => (Example a) where
+  examples :: [(a,a)]
+
+instance Example Double where
+  examples = targets
+
 class (Fit a) where
-  difference :: a -> a -> Double
+  difference :: a -> a -> a
 
 instance Fit Double where
   difference x y = abs (x - y)
-  
+
 instance Random Function where
   random g = let (x, g2) = randomR (0, 3 :: Int) g in ([Add, Subtract, Multiply, Divide] !! x, g2)
   randomR _ g = random g
@@ -47,18 +53,31 @@ data Terminal a = Constant a | X deriving (Show, Eq)
 
 data Tree a = Leaf (Terminal a) | Branch Function (Tree a) (Tree a) deriving (Show, Eq)
 
---instance Foldable Tree where
---  foldr f z (Leaf x) =  f x z
---  foldr f z (Branch o l r) = foldr f (f k (foldr f z r))
+data Program a = Program (Tree a)
+
+-- how can I get the operation into this?
+-- so that I could implement evaluate
+-- evaluate isn't really a use of fold, because the function is the operation
+-- perhaps, it is, perhaps f could apply o to l and r if they're both leaves
+
+instance Foldable Tree where
+  foldr f z (Leaf (Constant x)) = f x z
+  foldr f z (Branch o l r) = foldr f (foldr f (foldr f z r) l) o
+
+--  foldMap f (Leaf (Constant x)) = f x 
+--  foldMap f (Branch o l r) = foldMap f l `mappend` foldMap f r
   
 instance (Num a, Random a) => Random (Tree a) where
   random = randomTree
   randomR _ = random
 
+maxOr0 [] = 0
+maxOr0 xs = maximum xs
+
 -- How to get this function to always return a double (because I don't want to push the genericity all the way up to the user)
-programFitnessOverInputs :: (Num a, Fractional a, Fit a) => [(a, a)] -> (Tree a) -> Double
+programFitnessOverInputs :: (Num a, Fractional a, Fit a) => [(a, a)] -> (Tree a) -> a
 programFitnessOverInputs xs x = case pp of
-  (Leaf (Constant ll)) -> difference ll (snd (xs !! 0))
+                                  (Leaf (Constant ll)) -> difference ll (snd (xs !! 0))
   where pp = evaluate $ (substitute x (Leaf (Constant v))) where v = fst (xs !! 0)
 
 

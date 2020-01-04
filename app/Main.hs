@@ -16,7 +16,7 @@ evolve populationSize numberOfGenes targetFitness = do
       putStrLn $"Generations: " ++ (show generations)
       putStrLn $ "Fitness: " ++ (show $ sum $ map fitness finalPopulation)
 
-evolvePrograms :: Int ->  Double -> IO Tree
+evolvePrograms :: Int ->  Double -> IO (Tree Double)
 evolvePrograms populationSize targetFitness = do
   initialGenerator <- getStdGen
   let (population, g2) = (\(xs,g) -> (take populationSize xs, g)) $ trees (2*populationSize) initialGenerator
