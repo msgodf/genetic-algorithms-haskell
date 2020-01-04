@@ -40,7 +40,7 @@ instance (Fractional b, Ord b, Eq (a b), Example b, Random b, Num b, Random (a b
   (<=) a b = fitness a <= fitness b
 
 instance (Fractional b, Ord b, Random b, Eq (a b), Example b, Random (a b), Num b, Operator a b) => Genetic (Tree a) b where
-  fitness x = programFitnessOverInputs examples x --fst (examples !! 0 ) --
+  fitness x = programFitnessOverInputs examples x
   mutate = subtreeMutation mutationProbability
   crossover = crossoverNodes
   
@@ -85,16 +85,7 @@ maxOr0 xs = maximum xs
 
 -- How to get this function to always return a double (because I don't want to push the genericity all the way up to the user)
 programFitnessOverInputs :: (Num b, Fractional b, Fit b, Operator a b) => [(b, b)] -> Tree a b -> b
-programFitnessOverInputs xs x = case pp of
-                                  (Leaf (Constant ll)) -> difference ll (snd (xs !! 0))
-  where pp = evaluate $ (substitute x (Leaf (Constant v))) where v = fst (xs !! 0)
-
-
---(sum $
-                               --   fmap (\(input, output) -> let (Leaf (Constant v)) = evaluate $
-                                      --                            substitute x (Leaf (Constant input)) in
-                                        --                      abs(output - v))
-                                 -- xs)
+programFitnessOverInputs xs x = sum $ map (\(input,output) -> case evaluate $ (substitute x (Leaf (Constant input))) of (Leaf (Constant ll)) -> difference ll output) xs
                                 --- programLengthFitnessWeighting*(fromIntegral $ treeSize x)
 
 randomTree :: (RandomGen g, Num b, Random b, Random (a b)) => g -> (Tree a b, g)
