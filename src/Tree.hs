@@ -19,12 +19,21 @@ import Data.Set ( Set
                 , singleton
                 , empty)
 
-data ArithmeticFunction a = Add | Subtract | Multiply | Divide deriving (Show, Eq)
-
 maximumTreeDepth = 8
 mutationProbability = 0.8
 programLengthFitnessWeighting = 1.0
 targets = [(-10,-10),(0,0),(10,10)]
+
+data ArithmeticFunction a = Add | Subtract | Multiply | Divide deriving (Show, Eq)
+
+class (Operator m a) where
+  operate :: m a -> (Terminal a) -> (Terminal a) -> (Terminal a)
+
+instance (Num a, Fractional a) => Operator ArithmeticFunction a where
+  operate Add (Constant x) (Constant y) = Constant (x + y)
+  operate Subtract (Constant x) (Constant y) = (Constant (x - y))
+  operate Multiply (Constant x) (Constant y) = (Constant (x * y))
+  operate Divide (Constant x) (Constant y) = (Constant (x / y))
 
 instance (Eq a, Eq b, Num a, Fractional a, Random a, Example a, Random b) => Ord (Tree a b) where
   a `compare` b = fitness a `compare` fitness b
@@ -55,7 +64,6 @@ data Terminal a = Constant a | X deriving (Show, Eq)
 
 data Tree a b = Leaf (Terminal a) | Branch b (Tree a b) (Tree a b) deriving (Show, Eq)
 
-
 -- how can I get the operation into this?
 -- so that I could implement evaluate
 -- evaluate isn't really a use of fold, because the function is the operation
@@ -76,7 +84,7 @@ maxOr0 [] = 0
 maxOr0 xs = maximum xs
 
 -- How to get this function to always return a double (because I don't want to push the genericity all the way up to the user)
-programFitnessOverInputs :: (Num a, Fractional a, Fit a) => [(a, a)] -> (Tree a b) -> a
+programFitnessOverInputs :: (Num a, Fractional a, Fit a, Operator b a) => [(a, a)] -> (Tree a (b a)) -> a
 programFitnessOverInputs xs x = case pp of
                                   (Leaf (Constant ll)) -> difference ll (snd (xs !! 0))
   where pp = evaluate $ (substitute x (Leaf (Constant v))) where v = fst (xs !! 0)
@@ -89,7 +97,7 @@ programFitnessOverInputs xs x = case pp of
                                  -- xs)
                                 --- programLengthFitnessWeighting*(fromIntegral $ treeSize x)
 
-randomTree :: (RandomGen g, Num a, Random a, Random b) => g -> ((Tree a b), g)
+randomTree :: (RandomGen g, Num a, Random a, Random b) => g -> (Tree a b, g)
 randomTree g = (\(x, _, z) -> (x, z)) $ f 0 g where
   f = (\d g -> if d >= maximumTreeDepth
                then
@@ -110,19 +118,10 @@ prependAndThread f (xs, g) = (\(x, g) -> if (containsVariables x) then (x:xs, g)
 
 trees :: (RandomGen g, Num a, Random a, Random b) => Int -> g -> ([(Tree a b)], g)
 trees n g = iterate (prependAndThread randomTree) ([],g) !! n
-
-class (Operator m a) where
-  operate :: m a -> (Terminal a) -> (Terminal a) -> (Terminal a)
-
-instance (Num a, Fractional a) => Operator ArithmeticFunction a where
-  operate Add (Constant x) (Constant y) = Constant (x + y)
-  operate Subtract (Constant x) (Constant y) = (Constant (x - y))
-  operate Multiply (Constant x) (Constant y) = (Constant (x * y))
-  operate Divide (Constant x) (Constant y) = (Constant (x / y))
   
-evaluate :: (Num a, Fractional a) => (Tree a b) -> (Tree a b)
+evaluate :: (Num a, Fractional a, Operator b a) => (Tree a (b a)) -> (Tree a (b a))
 evaluate (Leaf a) = (Leaf a)
-evaluate (Branch o (Leaf a) (Leaf b)) = Leaf a -- $ operate o a b
+evaluate (Branch o (Leaf a) (Leaf b)) = Leaf (operate o a b)
 evaluate (Branch o a b) = evaluate $ Branch o (evaluate a) (evaluate b)
 
 flipBranches :: (Tree a b) -> (Tree a b)
