@@ -29,11 +29,12 @@ targets = [(-10,-10),(0,0),(10,10)]
 largeFractional :: (Fractional a) => a
 largeFractional = 1e20
 
--- ArithmeticFunction needs to has a phantom type so that we can define an Operator instance that works on arguments of that type.
-data ArithmeticFunction a = Add | Subtract | Multiply | Divide deriving (Show, Eq)
+data ArithmeticFunction = Add | Subtract | Multiply | Divide deriving (Show, Eq)
 
-class (Operator m a) where
-  operate :: m a -> (Terminal a) -> (Terminal a) -> (Terminal a)
+class (Operator k a) where
+  operate :: k -> (Terminal a) -> (Terminal a) -> (Terminal a)
+
+-- Previously, ArithmeticFunction needs to have a phantom type so that we could define an Operator instance that works on arguments of that type. The alternative is to make Operator have two type parameters. 
 
 instance (Eq a, Fractional a) => Operator ArithmeticFunction a where
   operate Add (Constant x) (Constant y) = Constant (x + y)
@@ -41,14 +42,14 @@ instance (Eq a, Fractional a) => Operator ArithmeticFunction a where
   operate Multiply (Constant x) (Constant y) = (Constant (x * y))
   operate Divide (Constant x) (Constant y) = if x == 0 || y == 0 then (Constant largeFractional) else (Constant (x / y)) 
 
-instance (Ord b, Eq (a b), Example b, Random b, Random (a b), Operator a b) => Ord (Tree a b) where
-  a `compare` b = fitness a `compare` fitness b
-  (<=) a b = fitness a <= fitness b
+instance (Ord b, Eq a, Example b, Random b, Random a, Operator a b) => Ord (Tree a b) where
+   a `compare` b = fitness a `compare` fitness b
+   (<=) a b = fitness a <= fitness b
 
-instance (Ord b, Random b, Eq (a b), Example b, Random (a b), Operator a b) => Genetic (Tree a) b where
-  fitness x = programFitnessOverInputs examples x
-  mutate = subtreeMutation mutationProbability
-  crossover = crossoverNodes
+instance (Ord b, Random b, Eq a, Example b, Random a, Operator a b) => Genetic (Tree a) b where
+   fitness x = programFitnessOverInputs examples x
+   mutate = subtreeMutation mutationProbability
+   crossover = crossoverNodes
 
 -- I don't love these typeclasses, but they allow me to make things generic.
 class (Fit a) => (Example a) where
@@ -65,28 +66,28 @@ instance Fit Double where
   difference x y = abs (x - y)
   toDouble x = x
 
-instance Random (ArithmeticFunction a) where
+instance Random (ArithmeticFunction) where
   random g = let (x, g2) = randomR (0, 3 :: Int) g in ([Add, Subtract, Multiply, Divide] !! x, g2)
   randomR _ g = random g
 
 data Terminal a = Constant a | X deriving (Show, Eq)
 
--- Tree has a polymorphic component a that is itself polymorphic in b
-data Tree a b = Leaf (Terminal b) | Branch (a b) (Tree a b) (Tree a b) deriving (Show, Eq)
+instance (Num a) => Num (Terminal a) where
+  (Constant a) + (Constant b) = (Constant (a + b))
+  (Constant a) - (Constant b) = (Constant (a - b))
+  (Constant a) * (Constant b) = (Constant (a * b))
+  abs (Constant a) = (Constant (abs a))
+  signum (Constant a) = Constant (signum a)
+  fromInteger x = Constant (fromInteger x)
 
--- how can I get the operation into this?
--- so that I could implement evaluate
--- evaluate isn't really a use of fold, because the function is the operation
--- perhaps, it is, perhaps f could apply o to l and r if they're both leaves
-
---instance Foldable (Tree b) where
---  foldr f z (Leaf (Constant x)) = f x z
---  foldr f z (Branch o l r) = foldr f (foldr f (foldr f z r) l) o
-
---  foldMap f (Leaf (Constant x)) = f x 
---  foldMap f (Branch o l r) = foldMap f l `mappend` foldMap f r
+instance (Fractional a) => Fractional (Terminal a) where
+  (Constant a) / (Constant b) = Constant (a / b)
+  fromRational x = Constant (fromRational x)
   
-instance (Random b, Random (a b), Operator a b) => Random (Tree a b) where
+data Tree a b = Leaf (Terminal b) | Branch a (Tree a b) (Tree a b) deriving (Show, Eq)
+
+-- because Tree:
+instance (Random b, Random a, Operator a b) => Random (Tree a b) where
   random = randomTree
   randomR _ = random
 
@@ -97,7 +98,7 @@ programFitnessOverInputs :: (Fit b, Operator a b) => [(b, b)] -> Tree a b -> Dou
 programFitnessOverInputs xs x = - (sum $ map (\(input,output) -> case evaluate $ (substitute x (Leaf (Constant input))) of (Leaf (Constant ll)) -> toDouble $ difference ll output) xs)
                                 - programLengthFitnessWeighting*(fromIntegral $ treeSize x)
 
-randomTree :: (RandomGen g, Random b, Random (a b)) => g -> (Tree a b, g)
+randomTree :: (RandomGen g, Random b, Random a) => g -> (Tree a b, g)
 randomTree g = (\(x, _, z) -> (x, z)) $ f 0 g where
   f = (\d g -> if d >= maximumTreeDepth
                then
@@ -116,7 +117,7 @@ randomTree g = (\(x, _, z) -> (x, z)) $ f 0 g where
 
 prependAndThread f (xs, g) = (\(x, g) -> if (containsVariables x) then (x:xs, g) else (xs, g)) $ f g
 
-trees :: (RandomGen g, Random b, Random (a b)) => Int -> g -> ([(Tree a b)], g)
+trees :: (RandomGen g, Random b, Random a) => Int -> g -> ([(Tree a b)], g)
 trees n g = iterate (prependAndThread randomTree) ([], g) !! n
   
 evaluate :: (Operator a b) => (Tree a b) -> (Tree a b)
@@ -180,7 +181,7 @@ substituteNthNode t1 t2 n = f t1 t2 n 0 where
                               then Branch o a b
                               else Branch o (f a t2 n (2*m + 1)) (f b t2 n (2*m + 2)))
 
-subtreeMutation :: (RandomGen g, Random b, Random (a b), Operator a b) => Double -> (Tree a b) -> g -> ((Tree a b), g)
+subtreeMutation :: (RandomGen g, Random b, Random a, Operator a b) => Double -> (Tree a b) -> g -> ((Tree a b), g)
 subtreeMutation p t g  = let (r, g2) = randomR (0, 1 :: (Double)) g in
                           if r > p
                           then (t, g2)
