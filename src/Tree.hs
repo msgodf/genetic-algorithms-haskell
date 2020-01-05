@@ -24,16 +24,21 @@ mutationProbability = 0.8
 programLengthFitnessWeighting = 1.0
 targets = [(-10,-10),(0,0),(10,10)]
 
+-- This is a large Fractional, to return when a division by zero happens, preventing such programs
+-- winning. Some exceptional behaviour might be better, but this is a fix for now.
+largeFractional :: (Fractional a) => a
+largeFractional = 1e20
+
 data ArithmeticFunction a = Add | Subtract | Multiply | Divide deriving (Show, Eq)
 
 class (Operator m a) where
   operate :: m a -> (Terminal a) -> (Terminal a) -> (Terminal a)
 
-instance (Fractional a) => Operator ArithmeticFunction a where
+instance (Eq a, Fractional a) => Operator ArithmeticFunction a where
   operate Add (Constant x) (Constant y) = Constant (x + y)
   operate Subtract (Constant x) (Constant y) = (Constant (x - y))
   operate Multiply (Constant x) (Constant y) = (Constant (x * y))
-  operate Divide (Constant x) (Constant y) = (Constant (x / y))
+  operate Divide (Constant x) (Constant y) = if x == 0 || y == 0 then (Constant largeFractional) else (Constant (x / y)) 
 
 instance (Ord b, Eq (a b), Example b, Random b, Random (a b), Operator a b) => Ord (Tree a b) where
   a `compare` b = fitness a `compare` fitness b
