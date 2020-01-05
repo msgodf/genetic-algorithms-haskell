@@ -29,17 +29,18 @@ data ArithmeticFunction a = Add | Subtract | Multiply | Divide deriving (Show, E
 class (Operator m a) where
   operate :: m a -> (Terminal a) -> (Terminal a) -> (Terminal a)
 
-instance (Num a, Fractional a) => Operator ArithmeticFunction a where
+instance (Fractional a) => Operator ArithmeticFunction a where
   operate Add (Constant x) (Constant y) = Constant (x + y)
   operate Subtract (Constant x) (Constant y) = (Constant (x - y))
   operate Multiply (Constant x) (Constant y) = (Constant (x * y))
   operate Divide (Constant x) (Constant y) = (Constant (x / y))
 
-instance (Fractional b, Ord b, Eq (a b), Example b, Random b, Num b, Random (a b), Operator a b) => Ord (Tree a b) where
+-- Num is a property of the operator implementation, so shouldn't be a constraint here. It's only there because fitness requires it.
+instance (Num b, Ord b, Eq (a b), Example b, Random b, Random (a b), Operator a b) => Ord (Tree a b) where
   a `compare` b = fitness a `compare` fitness b
   (<=) a b = fitness a <= fitness b
 
-instance (Fractional b, Ord b, Random b, Eq (a b), Example b, Random (a b), Num b, Operator a b) => Genetic (Tree a) b where
+instance (Num b, Ord b, Random b, Eq (a b), Example b, Random (a b), Operator a b) => Genetic (Tree a) b where
   fitness x = programFitnessOverInputs examples x
   mutate = subtreeMutation mutationProbability
   crossover = crossoverNodes
@@ -76,19 +77,19 @@ data Tree a b = Leaf (Terminal b) | Branch (a b) (Tree a b) (Tree a b) deriving 
 --  foldMap f (Leaf (Constant x)) = f x 
 --  foldMap f (Branch o l r) = foldMap f l `mappend` foldMap f r
   
-instance (Num b, Random b, Random (a b), Num (a b), Operator a b) => Random (Tree a b) where
+instance (Random b, Random (a b), Operator a b) => Random (Tree a b) where
   random = randomTree
   randomR _ = random
 
 maxOr0 [] = 0
 maxOr0 xs = maximum xs
 
--- How to get this function to always return a double (because I don't want to push the genericity all the way up to the user)
-programFitnessOverInputs :: (Num b, Fractional b, Fit b, Operator a b) => [(b, b)] -> Tree a b -> b
-programFitnessOverInputs xs x = sum $ map (\(input,output) -> case evaluate $ (substitute x (Leaf (Constant input))) of (Leaf (Constant ll)) -> difference ll output) xs
+-- How to get this function to always return a double (because I don't want to push the genericity all the way up to the user)? - for a start the Num constraint on b is a little annoying as it prevents custom types
+programFitnessOverInputs :: (Num b, Fit b, Operator a b) => [(b, b)] -> Tree a b -> b
+programFitnessOverInputs xs x = 0 - (sum $ map (\(input,output) -> case evaluate $ (substitute x (Leaf (Constant input))) of (Leaf (Constant ll)) -> difference ll output) xs)
                                 --- programLengthFitnessWeighting*(fromIntegral $ treeSize x)
 
-randomTree :: (RandomGen g, Num b, Random b, Random (a b)) => g -> (Tree a b, g)
+randomTree :: (RandomGen g, Random b, Random (a b)) => g -> (Tree a b, g)
 randomTree g = (\(x, _, z) -> (x, z)) $ f 0 g where
   f = (\d g -> if d >= maximumTreeDepth
                then
@@ -107,10 +108,10 @@ randomTree g = (\(x, _, z) -> (x, z)) $ f 0 g where
 
 prependAndThread f (xs, g) = (\(x, g) -> if (containsVariables x) then (x:xs, g) else (xs, g)) $ f g
 
-trees :: (RandomGen g, Num b, Random b, Random (a b)) => Int -> g -> ([(Tree a b)], g)
+trees :: (RandomGen g, Random b, Random (a b)) => Int -> g -> ([(Tree a b)], g)
 trees n g = iterate (prependAndThread randomTree) ([], g) !! n
   
-evaluate :: (Num b, Fractional b, Operator a b) => (Tree a b) -> (Tree a b)
+evaluate :: (Operator a b) => (Tree a b) -> (Tree a b)
 evaluate (Leaf a) = (Leaf a)
 evaluate (Branch o (Leaf a) (Leaf b)) = Leaf (operate o a b)
 evaluate (Branch o a b) = evaluate $ Branch o (evaluate a) (evaluate b)
@@ -171,7 +172,7 @@ substituteNthNode t1 t2 n = f t1 t2 n 0 where
                               then Branch o a b
                               else Branch o (f a t2 n (2*m + 1)) (f b t2 n (2*m + 2)))
 
-subtreeMutation :: (RandomGen g, Num b, Random b, Random (a b), Operator a b) => Double -> (Tree a b) -> g -> ((Tree a b), g)
+subtreeMutation :: (RandomGen g, Random b, Random (a b), Operator a b) => Double -> (Tree a b) -> g -> ((Tree a b), g)
 subtreeMutation p t g  = let (r, g2) = randomR (0, 1 :: (Double)) g in
                           if r > p
                           then (t, g2)
