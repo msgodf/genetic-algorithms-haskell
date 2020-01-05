@@ -35,16 +35,16 @@ instance (Fractional a) => Operator ArithmeticFunction a where
   operate Multiply (Constant x) (Constant y) = (Constant (x * y))
   operate Divide (Constant x) (Constant y) = (Constant (x / y))
 
--- Num is a property of the operator implementation, so shouldn't be a constraint here. It's only there because fitness requires it.
-instance (Num b, Ord b, Eq (a b), Example b, Random b, Random (a b), Operator a b) => Ord (Tree a b) where
+instance (Ord b, Eq (a b), Example b, Random b, Random (a b), Operator a b) => Ord (Tree a b) where
   a `compare` b = fitness a `compare` fitness b
   (<=) a b = fitness a <= fitness b
 
-instance (Num b, Ord b, Random b, Eq (a b), Example b, Random (a b), Operator a b) => Genetic (Tree a) b where
+instance (Ord b, Random b, Eq (a b), Example b, Random (a b), Operator a b) => Genetic (Tree a) b where
   fitness x = programFitnessOverInputs examples x
   mutate = subtreeMutation mutationProbability
   crossover = crossoverNodes
-  
+
+-- I don't love these typeclasses, but they allow me to make things generic.
 class (Fit a) => (Example a) where
   examples :: [(a,a)]
 
@@ -53,9 +53,11 @@ instance Example Double where
 
 class (Fit a) where
   difference :: a -> a -> a
+  toDouble :: a -> Double
 
 instance Fit Double where
   difference x y = abs (x - y)
+  toDouble x = x
 
 instance Random (ArithmeticFunction a) where
   random g = let (x, g2) = randomR (0, 3 :: Int) g in ([Add, Subtract, Multiply, Divide] !! x, g2)
@@ -84,10 +86,9 @@ instance (Random b, Random (a b), Operator a b) => Random (Tree a b) where
 maxOr0 [] = 0
 maxOr0 xs = maximum xs
 
--- How to get this function to always return a double (because I don't want to push the genericity all the way up to the user)? - for a start the Num constraint on b is a little annoying as it prevents custom types
-programFitnessOverInputs :: (Num b, Fit b, Operator a b) => [(b, b)] -> Tree a b -> b
-programFitnessOverInputs xs x = 0 - (sum $ map (\(input,output) -> case evaluate $ (substitute x (Leaf (Constant input))) of (Leaf (Constant ll)) -> difference ll output) xs)
-                                --- programLengthFitnessWeighting*(fromIntegral $ treeSize x)
+programFitnessOverInputs :: (Fit b, Operator a b) => [(b, b)] -> Tree a b -> Double
+programFitnessOverInputs xs x = - (sum $ map (\(input,output) -> case evaluate $ (substitute x (Leaf (Constant input))) of (Leaf (Constant ll)) -> toDouble $ difference ll output) xs)
+                                - programLengthFitnessWeighting*(fromIntegral $ treeSize x)
 
 randomTree :: (RandomGen g, Random b, Random (a b)) => g -> (Tree a b, g)
 randomTree g = (\(x, _, z) -> (x, z)) $ f 0 g where

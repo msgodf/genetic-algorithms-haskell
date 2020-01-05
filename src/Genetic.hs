@@ -11,7 +11,7 @@ import Data.List (sort)
 maxNumberOfGenerations = 5000
 
 class (Ord (m a), Ord a) => Genetic m a where
-  fitness :: m a -> a
+  fitness :: m a -> Double
   mutate :: (RandomGen b) => m a -> b -> (m a, b)
   crossover :: (RandomGen b) => ((m a),(m a)) -> b -> (((m a),(m a)), b)
 
@@ -31,7 +31,7 @@ step (xs, g) =
     (alpha:beta:gamma2:delta2:remainingPopulation, g4)
 
 -- Run the algorithm until the target fitness is reached
-stepWhile :: (Genetic m a, RandomGen c) => [(m a)] -> c -> Int -> a -> ([(m a)], Int)
+stepWhile :: (Genetic m a, RandomGen c) => [(m a)] -> c -> Int -> Double -> ([(m a)], Int)
 stepWhile population g generation targetFitness =
   let (xs, g2) = step (population, g)
       totalFitness = fitness (xs !! 0) in
