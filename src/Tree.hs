@@ -29,6 +29,7 @@ targets = [(-10,-10),(0,0),(10,10)]
 largeFractional :: (Fractional a) => a
 largeFractional = 1e20
 
+-- ArithmeticFunction needs to has a phantom type so that we can define an Operator instance that works on arguments of that type.
 data ArithmeticFunction a = Add | Subtract | Multiply | Divide deriving (Show, Eq)
 
 class (Operator m a) where
@@ -70,6 +71,7 @@ instance Random (ArithmeticFunction a) where
 
 data Terminal a = Constant a | X deriving (Show, Eq)
 
+-- Tree has a polymorphic component a that is itself polymorphic in b
 data Tree a b = Leaf (Terminal b) | Branch (a b) (Tree a b) (Tree a b) deriving (Show, Eq)
 
 -- how can I get the operation into this?
