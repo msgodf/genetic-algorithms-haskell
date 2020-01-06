@@ -11,6 +11,7 @@ module Tree
 
 import Genetic (Genetic(..))
 import System.Random
+import Data.Bifunctor
 import Data.Ord (Ord(..))
 import Data.Set ( Set
                 , elemAt
@@ -71,28 +72,17 @@ instance Random (ArithmeticFunction) where
   randomR _ g = random g
 
 data Terminal a = Constant a | X deriving (Show, Eq)
-
-instance (Num a) => Num (Terminal a) where
-  (Constant a) + (Constant b) = (Constant (a + b))
-  (Constant a) - (Constant b) = (Constant (a - b))
-  (Constant a) * (Constant b) = (Constant (a * b))
-  abs (Constant a) = (Constant (abs a))
-  signum (Constant a) = Constant (signum a)
-  fromInteger x = Constant (fromInteger x)
-
-instance (Fractional a) => Fractional (Terminal a) where
-  (Constant a) / (Constant b) = Constant (a / b)
-  fromRational x = Constant (fromRational x)
   
 data Tree a b = Leaf (Terminal b) | Branch a (Tree a b) (Tree a b) deriving (Show, Eq)
 
--- because Tree:
+instance Bifunctor Tree where
+  bimap f g (Branch o l r) = Branch (f o) (bimap f g l) (bimap f g r)
+  bimap f g (Leaf (Constant x)) = Leaf (Constant (g x))
+  bimap f g (Leaf X) = (Leaf X)
+
 instance (Random b, Random a, Operator a b) => Random (Tree a b) where
   random = randomTree
   randomR _ = random
-
-maxOr0 [] = 0
-maxOr0 xs = maximum xs
 
 programFitnessOverInputs :: (Fit b, Operator a b) => [(b, b)] -> Tree a b -> Double
 programFitnessOverInputs xs x = - (sum $ map (\(input,output) -> case evaluate $ (substitute x (Leaf (Constant input))) of (Leaf (Constant ll)) -> toDouble $ difference ll output) xs)
