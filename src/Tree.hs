@@ -22,8 +22,7 @@ import Data.Set ( Set
 
 maximumTreeDepth = 8
 mutationProbability = 0.8
-programLengthFitnessWeighting = 1.0
-targets = [(-10,-10),(0,0),(10,10)]
+programLengthFitnessWeighting = 0.9
 
 -- This is a large Fractional, to return when a division by zero happens, preventing such programs
 -- winning. Some exceptional behaviour might be better, but this is a fix for now.
@@ -89,7 +88,9 @@ instance Substitutable (Terminal a) where
   substitute y x = x
 
 instance Example (Terminal Double) where
-  examples = targets
+  examples = [ (Constant (0.0 :: Double), Constant (0.0 :: Double))
+             , (Constant (-2.0), Constant (-1.0))
+             , (Constant 2.0, Constant 1.0)]
 
 instance Fit (Terminal Double) where
   difference (Constant x) (Constant y) = Constant (abs (x - y))
