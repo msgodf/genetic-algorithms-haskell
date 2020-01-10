@@ -68,7 +68,7 @@ instance Bifoldable Tree where
   bifoldr _ g z (Leaf v) = g v z
   bifoldr f g z (Branch o l r) = f o (bifoldr f g (bifoldr f g z r) l)
 
-instance Random (ArithmeticFunction) where
+instance Random ArithmeticFunction where
   random g = let (x, g2) = randomR (0, 3 :: Int) g in ([Add, Subtract, Multiply, Divide] !! x, g2)
   randomR _ g = random g
 
@@ -79,7 +79,7 @@ instance (Eq a, Fractional a) => Operator ArithmeticFunction (Terminal a) where
   operate Divide (Constant x) (Constant y) = if x == 0 || y == 0 then (Constant largeFractional) else (Constant (x / y))
 
 -- We should never be comparing variables (because we don't know their value)
-instance (Ord a) => Ord (Terminal a) where
+instance Ord a => Ord (Terminal a) where
   (Constant x) `compare` (Constant y) = x `compare` y
   (<=) (Constant x) (Constant y) = x <= y
 
@@ -95,7 +95,7 @@ instance (Random b, Random a, Operator a b) => Random (Tree a b) where
   random = randomTree
   randomR _ = random
 
-instance (Random a) => Random (Terminal a) where
+instance Random a => Random (Terminal a) where
   random g = let (x, g2) = random g in
     case x of
       True -> let (value, g3) = random g2 in (Constant value, g3)
@@ -150,14 +150,14 @@ treeDepth t = f t 0 where
                                                         n = f b (d + 1)
                          (Leaf a) -> d)
 
-labelTree :: (Tree a b) -> Set Int
+labelTree :: Tree a b -> Set Int
 labelTree t = f t 0 empty where
   f = (\t n xs -> case t of (Leaf a) -> (singleton n) `union` xs
                             (Branch o a b) -> (singleton n) `union`
                                               (f a (2*n + 1) xs) `union`
                                               (f b (2*n + 2) xs))
 
-intersectionOfTreeLabels :: (Tree a b) -> (Tree a b) -> Set Int
+intersectionOfTreeLabels :: Tree a b -> Tree a b -> Set Int
 intersectionOfTreeLabels t1 t2 = (labelTree t2) `intersection` (labelTree t1)
 
 swapNodes :: ((Tree a b), (Tree a b)) -> Int -> ((Tree a b), (Tree a b))
@@ -170,7 +170,7 @@ swapNodes ts n = f ts n 0 where
                                               else (Branch o1 a2 b2, Branch o2 c2 d2)
           (a, b) -> if n == m then (b, a) else (a, b))
 
-substituteNthNode :: (Tree a b) -> (Tree a b) -> Int -> (Tree a b)
+substituteNthNode :: Tree a b -> Tree a b -> Int -> Tree a b
 substituteNthNode t1 t2 n = f t1 t2 n 0 where
   f = (\t1 t2 n m -> case t1 of
           (Leaf a) -> if n == m then t2 else (Leaf a)
@@ -206,7 +206,7 @@ containsVariables (Branch o a b) = containsVariables a || containsVariables b
 containsVariables (Leaf X) = True
 containsVariables x = False
 
-treeSize :: (Tree a b) -> Int
+treeSize :: Tree a b -> Int
 treeSize x = length $ labelTree x
 
 waste g = (\(_,g) -> g) $ (random g :: (Int,StdGen))
