@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 module Genetic
   ( Genetic(..)
   , stepWhile
@@ -9,17 +10,17 @@ import Data.List (sort)
 
 maxNumberOfGenerations = 5000
 
-class (Ord a) => (Genetic a) where
-  fitness :: a -> Double
-  mutate :: (RandomGen b) => a -> b -> (a, b)
-  crossover :: (RandomGen b) => (a,a) -> b -> ((a,a), b)
+class (Ord (m a), Ord a) => Genetic m a where
+  fitness :: m a -> Double
+  mutate :: (RandomGen b) => m a -> b -> (m a, b)
+  crossover :: (RandomGen b) => ((m a),(m a)) -> b -> (((m a),(m a)), b)
 
-selection :: (Genetic a) => [a] -> ([a], [a])
+selection :: (Genetic m a) => [m a] -> ([m a], [m a])
 selection xs = (alpha:beta:[], rest) where
   alpha:beta:rest = reverse $ sort xs
 
 -- A single step of the algorithm
-step :: (Genetic a, RandomGen b) => ([a], b) -> ([a], b)
+step :: (Genetic m a, RandomGen c) => ([m a], c) -> ([m a], c)
 step (xs, g) =
   let
       (alpha:beta:_, rest) = selection xs
@@ -30,7 +31,7 @@ step (xs, g) =
     (alpha:beta:gamma2:delta2:remainingPopulation, g4)
 
 -- Run the algorithm until the target fitness is reached
-stepWhile :: (Genetic a, RandomGen b) => [a] -> b -> Int -> Double -> ([a], Int)
+stepWhile :: (Genetic m a, RandomGen c) => [(m a)] -> c -> Int -> Double -> ([(m a)], Int)
 stepWhile population g generation targetFitness =
   let (xs, g2) = step (population, g)
       totalFitness = fitness (xs !! 0) in
