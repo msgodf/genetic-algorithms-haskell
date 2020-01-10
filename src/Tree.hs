@@ -2,16 +2,16 @@
 {-# LANGUAGE FlexibleInstances #-}
 module Tree
   ( trees
-  , evaluate
-  , substitute
   , Tree(..)
   , Terminal(..)
   , ArithmeticFunction(..)
+  , Operator(..)
   ) where
 
 import Genetic (Genetic(..))
 import System.Random
 import Data.Bifunctor
+import Data.Bifoldable
 import Data.Ord (Ord(..))
 import Data.Set ( Set
                 , elemAt
@@ -32,88 +32,109 @@ largeFractional = 1e20
 
 data ArithmeticFunction = Add | Subtract | Multiply | Divide deriving (Show, Eq)
 
+data Terminal a = Constant a | X deriving (Show, Eq)
+
+data Tree a b = Leaf b | Branch a (Tree a b) (Tree a b) deriving (Show, Eq)
+
+
 class (Operator k a) where
-  operate :: k -> (Terminal a) -> (Terminal a) -> (Terminal a)
-
--- Previously, ArithmeticFunction needs to have a phantom type so that we could define an Operator instance that works on arguments of that type. The alternative is to make Operator have two type parameters. 
-
-instance (Eq a, Fractional a) => Operator ArithmeticFunction a where
-  operate Add (Constant x) (Constant y) = Constant (x + y)
-  operate Subtract (Constant x) (Constant y) = (Constant (x - y))
-  operate Multiply (Constant x) (Constant y) = (Constant (x * y))
-  operate Divide (Constant x) (Constant y) = if x == 0 || y == 0 then (Constant largeFractional) else (Constant (x / y)) 
-
-instance (Ord b, Eq a, Example b, Random b, Random a, Operator a b) => Ord (Tree a b) where
-   a `compare` b = fitness a `compare` fitness b
-   (<=) a b = fitness a <= fitness b
-
-instance (Ord b, Random b, Eq a, Example b, Random a, Operator a b) => Genetic (Tree a) b where
-   fitness x = programFitnessOverInputs examples x
-   mutate = subtreeMutation mutationProbability
-   crossover = crossoverNodes
+  operate :: k -> a -> a -> a
 
 -- I don't love these typeclasses, but they allow me to make things generic.
 class (Fit a) => (Example a) where
   examples :: [(a,a)]
 
-instance Example Double where
-  examples = targets
+class Substitutable a where
+  substitute :: a -> a -> a
 
 class (Fit a) where
-  difference :: a -> a -> a
+  difference :: a -> a -> a -- used to calculate the difference between the input and output of a function
   toDouble :: a -> Double
 
-instance Fit Double where
-  difference x y = abs (x - y)
-  toDouble x = x
+
+instance (Substitutable b, Ord b, Eq a, Example b, Random b, Random a, Operator a b) => Ord (Tree a b) where
+    a `compare` b = fitness a `compare` fitness b
+    (<=) a b = fitness a <= fitness b
+
+instance (Substitutable b, Ord b, Random b, Eq a, Example b, Random a, Operator a b) => Genetic (Tree a) b where
+    fitness x = (programFitness x) - programLengthFitnessWeighting * fromIntegral (treeSize x)
+    mutate = subtreeMutation mutationProbability
+    crossover = crossoverNodes
+
+instance Bifunctor Tree where
+  bimap f g (Branch o l r) = Branch (f o) (bimap f g l) (bimap f g r)
+  bimap f g (Leaf x) = Leaf (g x)
+
+instance Bifoldable Tree where
+  bifoldr _ g z (Leaf v) = g v z
+  bifoldr f g z (Branch o l r) = f o (bifoldr f g (bifoldr f g z r) l)
 
 instance Random (ArithmeticFunction) where
   random g = let (x, g2) = randomR (0, 3 :: Int) g in ([Add, Subtract, Multiply, Divide] !! x, g2)
   randomR _ g = random g
 
-data Terminal a = Constant a | X deriving (Show, Eq)
-  
-data Tree a b = Leaf (Terminal b) | Branch a (Tree a b) (Tree a b) deriving (Show, Eq)
+instance (Eq a, Fractional a) => Operator ArithmeticFunction (Terminal a) where
+  operate Add (Constant x) (Constant y) = Constant (x + y)
+  operate Subtract (Constant x) (Constant y) = (Constant (x - y))
+  operate Multiply (Constant x) (Constant y) = (Constant (x * y))
+  operate Divide (Constant x) (Constant y) = if x == 0 || y == 0 then (Constant largeFractional) else (Constant (x / y))
 
-instance Bifunctor Tree where
-  bimap f g (Branch o l r) = Branch (f o) (bimap f g l) (bimap f g r)
-  bimap f g (Leaf (Constant x)) = Leaf (Constant (g x))
-  bimap f g (Leaf X) = (Leaf X)
+-- We should never be comparing variables (because we don't know their value)
+instance (Ord a) => Ord (Terminal a) where
+  (Constant x) `compare` (Constant y) = x `compare` y
+  (<=) (Constant x) (Constant y) = x <= y
+
+instance Substitutable (Terminal a) where
+  substitute y X = y
+  substitute y x = x
+
+instance Example (Terminal Double) where
+  examples = targets
+
+instance Fit (Terminal Double) where
+  difference (Constant x) (Constant y) = Constant (abs (x - y))
+  toDouble (Constant x) = x
 
 instance (Random b, Random a, Operator a b) => Random (Tree a b) where
   random = randomTree
   randomR _ = random
 
-programFitnessOverInputs :: (Fit b, Operator a b) => [(b, b)] -> Tree a b -> Double
-programFitnessOverInputs xs x = - (sum $ map (\(input,output) -> case evaluate $ (substitute x (Leaf (Constant input))) of (Leaf (Constant ll)) -> toDouble $ difference ll output) xs)
-                                - programLengthFitnessWeighting*(fromIntegral $ treeSize x)
+instance (Random a) => Random (Terminal a) where
+  random g = let (x, g2) = random g in
+    case x of
+      True -> let (value, g3) = random g2 in (Constant value, g3)
+      False -> (X, g2)
+  randomR _ = random
+
+programFitness :: (Operator a b, Substitutable b, Bifoldable p, Bifunctor p, Example b) => p a b -> Double
+programFitness x = - (sum $ map (\(input,output) -> toDouble (difference (head $ evaluate x input) output)) examples)
+
+evaluate :: (Example b, Operator a b, Substitutable b, Bifoldable p, Bifunctor p) => p a b -> b -> [b]
+evaluate x y = reduceTree $ bimap id (substitute y) x
+
+reduceTree :: (Operator a b, Bifoldable p) => p a b ->  [b]
+reduceTree = bifoldr f (:) [] where f = (\o xs -> case xs of (x:y:_) -> [operate o x y]
+                                                             (x:_) -> [x])
 
 randomTree :: (RandomGen g, Random b, Random a) => g -> (Tree a b, g)
 randomTree g = (\(x, _, z) -> (x, z)) $ f 0 g where
   f = (\d g -> if d >= maximumTreeDepth
                then
-                 let (value, g2) = random g in
-                   (Leaf (Constant value), d + 1, g2)
+                 let (value, g2) = random g in (Leaf value, d + 1, g2)
                else
-                 let (x, g2) = randomR (0, 2 :: Int) g in
+                 let (x, g2) = random g in
                    case x of
-                     0 -> let (value, g3) = random g2 in
-                       (Leaf (Constant value), d, g3)
-                     1 -> let (operation, g3) = random g2
-                              (left, d2, g4) = f (d + 1) g3
-                              (right, d3, g5) = f (d + 1) g4 in
-                            ((Branch operation left right), d3, g5)
-                     2 -> (Leaf X, d, g2))
+                     True -> let (value, g3) = random g2 in
+                               (Leaf value, d, g3)
+                     False -> let (operation, g3) = random g2
+                                  (left, d2, g4) = f (d + 1) g3
+                                  (right, d3, g5) = f (d + 1) g4 in
+                            ((Branch operation left right), d3, g5))
 
-prependAndThread f (xs, g) = (\(x, g) -> if (containsVariables x) then (x:xs, g) else (xs, g)) $ f g
+prependAndThread f (xs, g) = (\(x, g) -> (x:xs, g)) $ f g
 
 trees :: (RandomGen g, Random b, Random a) => Int -> g -> ([(Tree a b)], g)
 trees n g = iterate (prependAndThread randomTree) ([], g) !! n
-  
-evaluate :: (Operator a b) => (Tree a b) -> (Tree a b)
-evaluate (Leaf a) = (Leaf a)
-evaluate (Branch o (Leaf a) (Leaf b)) = Leaf (operate o a b)
-evaluate (Branch o a b) = evaluate $ Branch o (evaluate a) (evaluate b)
 
 flipBranches :: (Tree a b) -> (Tree a b)
 flipBranches (Branch o a b) = Branch o b a
@@ -147,20 +168,6 @@ swapNodes ts n = f ts n 0 where
                                               else (Branch o1 a2 b2, Branch o2 c2 d2)
           (a, b) -> if n == m then (b, a) else (a, b))
 
-replaceFirstLeafWithVariable :: (Tree a b) -> (Tree a b)
-replaceFirstLeafWithVariable t = fst $ f t where
-  f = (\t -> case t of
-          (Leaf (Constant t)) -> ((Leaf X), True)
-          (Branch o a b) -> let (t1, r1) = f a
-                                (t2, r2) = f b in
-                              if r1
-                              then (Branch o t1 b, r1)
-                              else
-                                if r2
-                                then (Branch o a t2, r2)
-                                else (Branch o a b, False)
-          t -> (t, False))
-
 substituteNthNode :: (Tree a b) -> (Tree a b) -> Int -> (Tree a b)
 substituteNthNode t1 t2 n = f t1 t2 n 0 where
   f = (\t1 t2 n m -> case t1 of
@@ -181,17 +188,12 @@ subtreeMutation p t g  = let (r, g2) = randomR (0, 1 :: (Double)) g in
                                    (t2, g4) = randomTree g3 in
                             (substituteNthNode t t2 n, g4)
 
-substitute :: (Tree a b) -> (Tree a b) -> (Tree a b)
-substitute (Leaf X) v = v
-substitute (Branch o a b) n = Branch o (substitute a n) (substitute b n)
-substitute t n = t
-
 crossoverNodes :: (RandomGen g) => ((Tree a b), (Tree a b)) -> g -> (((Tree a b), (Tree a b)), g)
 crossoverNodes (a, b) g = let intersectionSet = intersectionOfTreeLabels a b
                               (crossoverPoint, g2) = randomR (0, ((length intersectionSet) - 1)) g in
                            (swapNodes (a,b) (elemAt crossoverPoint intersectionSet), g2)
 
-containsVariables :: (Tree a b) -> Bool
+containsVariables :: (Tree a (Terminal b)) -> Bool
 containsVariables (Branch o a b) = containsVariables a || containsVariables b
 containsVariables (Leaf X) = True
 containsVariables x = False
