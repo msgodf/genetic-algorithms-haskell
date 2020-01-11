@@ -207,6 +207,6 @@ containsVariables (Leaf X) = True
 containsVariables x = False
 
 treeSize :: Tree a b -> Int
-treeSize x = length $ labelTree x
+treeSize = bifoldr f f 0 where f = (\ _ x -> x + 1)
 
 waste g = (\(_,g) -> g) $ (random g :: (Int,StdGen))
