@@ -150,17 +150,22 @@ treeDepth t = f t 0 where
                                                         n = f b (d + 1)
                          (Leaf a) -> d)
 
-labelTree :: Tree a b -> Set Int
-labelTree t = f t 0 empty where
-  f = (\t n xs -> case t of (Leaf a) -> (singleton n) `union` xs
-                            (Branch o a b) -> (singleton n) `union`
-                                              (f a (2*n + 1) xs) `union`
-                                              (f b (2*n + 2) xs))
+floorlog2 :: Integer -> Integer
+floorlog2 0 = error "floor(log2(x)) called with x = 0"
+floorlog2 x = toInteger(floor(logBase 2.0 ((fromInteger x) :: Double)))
 
-intersectionOfTreeLabels :: Tree a b -> Tree a b -> Set Int
+branchLabels :: a -> [[Integer]] -> [[Integer]]
+branchLabels _ (l:r:rest) = [0:leftSubtree ++ rightSubtree] ++ rest
+  where leftSubtree = fmap (\x -> x + 2^(floorlog2 (x + 1))) l
+        rightSubtree = fmap (\x -> x + 2^(1 + floorlog2 (x + 1))) r
+
+labelTree :: (Bifoldable p) => p a b ->  Set Integer
+labelTree = fromList . head . bifoldr branchLabels (\_ xs -> [0]:xs) []
+
+intersectionOfTreeLabels :: Tree a b -> Tree a b -> Set Integer
 intersectionOfTreeLabels t1 t2 = (labelTree t2) `intersection` (labelTree t1)
 
-swapNodes :: ((Tree a b), (Tree a b)) -> Int -> ((Tree a b), (Tree a b))
+swapNodes :: ((Tree a b), (Tree a b)) -> Integer -> ((Tree a b), (Tree a b))
 swapNodes ts n = f ts n 0 where
   f = (\ts n m -> case ts of
           (Branch o1 a b, Branch o2 c d) -> let (a2, c2) = f (a, c) (2*n + 1) m
@@ -170,7 +175,7 @@ swapNodes ts n = f ts n 0 where
                                               else (Branch o1 a2 b2, Branch o2 c2 d2)
           (a, b) -> if n == m then (b, a) else (a, b))
 
-substituteNthNode :: Tree a b -> Tree a b -> Int -> Tree a b
+substituteNthNode :: Tree a b -> Tree a b -> Integer -> Tree a b
 substituteNthNode t1 t2 n = f t1 t2 n 0 where
   f = (\t1 t2 n m -> case t1 of
           (Leaf a) -> if n == m then t2 else (Leaf a)
